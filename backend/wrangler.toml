@@ -12,7 +12,7 @@ ENCRYPTION_SECRET = "lzl123456789987654321"
 [[d1_databases]]
 binding = "DB"
 database_name = "cloudpaste-db"
-database_id = "xxxxxxxxxxxxxxxxx"
+database_id = "fc9bddc2-9bb4-484b-8d72-4cede6a914c0"
 
 # 本地开发时使用
 [env.dev]
