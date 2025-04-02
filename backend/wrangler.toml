@@ -11,7 +11,7 @@ ENCRYPTION_SECRET = "lzl123456789987654321"
 # 需要替换为实际的数据库ID
 [[d1_databases]]
 binding = "DB"
-database_name = "cloudpaste-db"
+database_name = "cloudpaste"
 database_id = "bafc8f8d-4631-4ea3-9038-880808bf623c"
 
 # 本地开发时使用
