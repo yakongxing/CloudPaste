@@ -1,5 +1,7 @@
 export default {
   common: {
+    error: "Error",
+    retry: "Retry",
     unknown: "Unknown",
     loading: "Loading...",
     confirm: "Confirm",

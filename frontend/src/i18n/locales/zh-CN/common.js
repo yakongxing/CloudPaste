@@ -1,5 +1,7 @@
 export default {
   common: {
+    error: "错误",
+    retry: "重试",
     unknown: "未知",
     loading: "加载中...",
     confirm: "确认",
