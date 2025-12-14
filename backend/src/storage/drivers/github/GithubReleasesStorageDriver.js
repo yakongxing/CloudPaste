@@ -19,6 +19,7 @@ import { DriverError, NotFoundError, AppError } from "../../../http/errors.js";
 import { buildFileInfo } from "../../utils/FileInfoBuilder.js";
 import { createHttpStreamDescriptor, createWebStreamDescriptor } from "../../streaming/StreamDescriptorUtils.js";
 import { buildFullProxyUrl } from "../../../constants/proxy.js";
+import { getMimeTypeFromFilename } from "../../../utils/fileUtils.js";
 
 const RELEASE_NOTES_FILENAME = "RELEASE_NOTES.md";
 
@@ -732,7 +733,7 @@ export class GithubReleasesStorageDriver extends BaseDriver {
         isDirectory: false,
         size,
         modified,
-        mimetype: null,
+        mimetype: getMimeTypeFromFilename(name),
         mount,
         storageType: mount?.storage_type,
         db,
@@ -831,6 +832,8 @@ export class GithubReleasesStorageDriver extends BaseDriver {
 
     const promises = entries.map(async (entry) => {
       const fsPath = this._joinChildPath(baseFsPath, entry.name);
+      const isZip = entry.name.includes("(zip)");
+      const mimetype = isZip ? "application/zip" : "application/gzip";
       const info = await buildFileInfo({
         fsPath,
         name: entry.name,
@@ -838,7 +841,7 @@ export class GithubReleasesStorageDriver extends BaseDriver {
         // 无法获得准确大小，统一标记为 1
         size: 1,
         modified: createdAt,
-        mimetype: "application/octet-stream",
+        mimetype,
         mount,
         storageType: mount?.storage_type,
         db,
@@ -1177,7 +1180,7 @@ export class GithubReleasesStorageDriver extends BaseDriver {
       isDirectory,
       size,
       modified,
-      mimetype: isReleaseNotes ? "text/markdown" : null,
+      mimetype: isReleaseNotes ? "text/markdown" : isSourceCode ? (assetName.includes("(zip)") ? "application/zip" : "application/gzip") : getMimeTypeFromFilename(assetName),
       mount,
       storageType: mount?.storage_type,
       db,
@@ -1319,7 +1322,11 @@ export class GithubReleasesStorageDriver extends BaseDriver {
         ? 1
         : null;
 
-    const contentType = "application/octet-stream";
+    const contentType = isSourceCode
+      ? assetName.includes("(zip)")
+        ? "application/zip"
+        : "application/gzip"
+      : getMimeTypeFromFilename(assetName);
     const lastModified = release?.published_at ? new Date(release.published_at) : null;
 
     return createHttpStreamDescriptor({

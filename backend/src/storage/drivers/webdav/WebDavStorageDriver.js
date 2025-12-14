@@ -517,7 +517,6 @@ export class WebDavStorageDriver extends BaseDriver {
     try {
       const q = (query || "").toLowerCase();
       const results = [];
-      const base = this._normalize(this.defaultFolder || "");
       const queue = [davPath];
 
       while (queue.length > 0 && results.length < maxResults) {
@@ -548,13 +547,9 @@ export class WebDavStorageDriver extends BaseDriver {
 
           // 名称模糊匹配
           if (basename.toLowerCase().includes(q)) {
-            // 还原相对于 default_folder 的子路径
             const decodedFilename = this._decodeComponent(filename);
             const normalizedFilename = this._normalize(decodedFilename);
             let relative = normalizedFilename;
-            if (base && normalizedFilename.startsWith(base)) {
-              relative = normalizedFilename.slice(base.length);
-            }
             if (relative && !relative.startsWith("/")) {
               relative = "/" + relative;
             }
@@ -1033,12 +1028,10 @@ export class WebDavStorageDriver extends BaseDriver {
       "unnamed_file";
 
     const normalizedSub = this._normalize(subPath || "");
-    const base = this._normalize(this.defaultFolder || "");
 
     const isFilePath = this._isCompleteFilePath(normalizedSub, fileName);
     let joined = "";
-    if (base) joined = base;
-    if (normalizedSub) joined = joined ? `${joined}/${normalizedSub}` : normalizedSub;
+    if (normalizedSub) joined = normalizedSub;
 
     if (!isFilePath) {
       joined = joined ? `${joined}/${fileName}` : fileName;

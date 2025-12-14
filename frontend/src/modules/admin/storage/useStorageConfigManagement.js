@@ -484,7 +484,17 @@ export function useStorageConfigManagement(options = {}) {
 
       // 写权限状态 - 简洁显示
       if (this.result.write?.success) {
-        details.push("✓ 写权限正常");
+        if (this.result.write?.skipped) {
+          if (this.result.write?.note) {
+            details.push(`✓ 写测试已跳过（${this.result.write.note}）`);
+          } else {
+            details.push("✓ 写测试已跳过");
+          }
+        } else if (this.result.write?.note) {
+          details.push(`✓ 写权限正常（${this.result.write.note}）`);
+        } else {
+          details.push("✓ 写权限正常");
+        }
       } else {
         details.push("✗ 写权限失败");
         if (this.result.write?.error) {

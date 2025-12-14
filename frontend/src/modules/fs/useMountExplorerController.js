@@ -22,6 +22,20 @@ const invalidateCachesAfterMutation = () => {
   isDirRecord.clear();
 };
 
+// 存储配置发生变更（例如 GitHub ref 切换）时：历史/prefetch/tombstone 需要失效，
+// 否则可能出现“旧目录快照短暂回显 → 后台刷新后消失”的闪现现象。
+let storageConfigChangeListenerBound = false;
+const bindStorageConfigChangeListener = () => {
+  if (storageConfigChangeListenerBound) return;
+  if (typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+  storageConfigChangeListenerBound = true;
+  window.addEventListener("cloudpaste:storage-config-changed", () => {
+    invalidateCachesAfterMutation();
+    deletedTombstones.clear();
+  });
+};
+bindStorageConfigChangeListener();
+
 // 一致性保障：删除/改名等写操作成功后，某些后端/驱动可能存在短暂的“列目录可见延迟”；
 // 为避免“已删除条目复活/闪烁”，前端会对已删除路径建立短期 tombstone，并在目录加载时过滤。
 const TOMBSTONE_TTL_MS = 2 * 60 * 1000;
