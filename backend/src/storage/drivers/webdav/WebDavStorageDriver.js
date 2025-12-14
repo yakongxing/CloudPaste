@@ -296,6 +296,7 @@ export class WebDavStorageDriver extends BaseDriver {
       contentType,
       etag,
       lastModified,
+      supportsRange: true,
       async fetchResponse(signal) {
         const resp = await fetch(fileUrl, {
           headers: { Authorization: authHeader },
@@ -306,6 +307,33 @@ export class WebDavStorageDriver extends BaseDriver {
             throw new NotFoundError("文件不存在");
           }
           throw wrapError(new Error(`HTTP ${resp.status}`), "下载失败", resp.status);
+        }
+        return resp;
+      },
+      async fetchRangeResponse(signal, rangeHeader) {
+        const resp = await fetch(fileUrl, {
+          headers: { Authorization: authHeader, Range: rangeHeader },
+          signal,
+        });
+        if (!resp.ok) {
+          if (resp.status === 404) {
+            throw new NotFoundError("文件不存在");
+          }
+          throw wrapError(new Error(`HTTP ${resp.status}`), "下载失败", resp.status);
+        }
+        return resp;
+      },
+      async fetchHeadResponse(signal) {
+        const resp = await fetch(fileUrl, {
+          method: "HEAD",
+          headers: { Authorization: authHeader },
+          signal,
+        });
+        if (!resp.ok) {
+          if (resp.status === 404) {
+            throw new NotFoundError("文件不存在");
+          }
+          throw wrapError(new Error(`HTTP ${resp.status}`), "获取文件元数据失败", resp.status);
         }
         return resp;
       },

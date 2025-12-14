@@ -309,22 +309,28 @@ export class GithubApiStorageDriver extends BaseDriver {
     const rawUrl = rel ? this._applyProxy(`https://raw.githubusercontent.com/${this.owner}/${this.repo}/${encodedRef}/${this._encodeRawPath(rel)}`) : null;
     const filename = this._basename(path, false) || (rel ? rel.split("/").filter(Boolean).pop() : "") || "file";
     const contentType = getMimeTypeFromFilename(filename);
+    let knownSize = null;
+
+    // 私有仓库：提前拉取元信息用于 submodule 判定 + size 推断（避免 Range 时 size=null 导致降级为 200）
+    if (this._repoPrivate || !rawUrl) {
+      const meta = await this._fetchJson(contentsUrl, { headers: { Accept: "application/vnd.github+json" } });
+      if (meta?.type === "submodule") {
+        throw new DriverError("不支持下载 Git submodule（子模块）", {
+          status: ApiStatus.BAD_REQUEST,
+          code: "DRIVER_ERROR.GITHUB_API_SUBMODULE_UNSUPPORTED",
+          expose: true,
+          details: { subPath: normalizedSubPath },
+        });
+      }
+      if (meta && typeof meta.size === "number" && Number.isFinite(meta.size) && meta.size >= 0) {
+        knownSize = meta.size;
+      }
+    }
 
     return createHttpStreamDescriptor({
       fetchResponse: async (signal) => {
         // 私有仓库：必须走 Contents API（raw.githubusercontent.com 不带鉴权）
         if (this._repoPrivate || !rawUrl) {
-          // submodule 无法作为普通文件下载
-          const meta = await this._fetchJson(contentsUrl, { headers: { Accept: "application/vnd.github+json" } });
-          if (meta?.type === "submodule") {
-            throw new DriverError("不支持下载 Git submodule（子模块）", {
-              status: ApiStatus.BAD_REQUEST,
-              code: "DRIVER_ERROR.GITHUB_API_SUBMODULE_UNSUPPORTED",
-              expose: true,
-              details: { subPath: normalizedSubPath },
-            });
-          }
-
           return await fetch(contentsUrl, {
             method: "GET",
             headers: this._buildHeaders({ Accept: "application/vnd.github.raw" }),
@@ -354,9 +360,60 @@ export class GithubApiStorageDriver extends BaseDriver {
         }
         return resp;
       },
-      size: null,
+      fetchRangeResponse: async (signal, rangeHeader) => {
+        // 私有仓库：Range 走 Contents raw
+        if (this._repoPrivate || !rawUrl) {
+          return await fetch(contentsUrl, {
+            method: "GET",
+            headers: this._buildHeaders({ Accept: "application/vnd.github.raw", Range: rangeHeader }),
+            signal,
+          });
+        }
+
+        // 公共仓库：Range 走 raw.githubusercontent.com
+        const resp = await fetch(rawUrl, { method: "GET", headers: { Range: rangeHeader }, signal });
+        if (resp.status === 404) {
+          // raw 的 404：再用 Contents 元信息区分“文件不存在”还是“submodule”
+          try {
+            const meta = await this._fetchJson(contentsUrl, { headers: { Accept: "application/vnd.github+json" } });
+            if (meta?.type === "submodule") {
+              throw new DriverError("不支持下载 Git submodule（子模块）", {
+                status: ApiStatus.BAD_REQUEST,
+                code: "DRIVER_ERROR.GITHUB_API_SUBMODULE_UNSUPPORTED",
+                expose: true,
+                details: { subPath: normalizedSubPath },
+              });
+            }
+          } catch (e) {
+            if (e instanceof DriverError && e.code === "DRIVER_ERROR.GITHUB_API_SUBMODULE_UNSUPPORTED") {
+              throw e;
+            }
+          }
+        }
+        return resp;
+      },
+      fetchHeadResponse: async (signal) => {
+        // 优先对“最终下载 URL”执行 HEAD，用于 Range 场景探测 size
+        if (this._repoPrivate || !rawUrl) {
+          try {
+            return await fetch(contentsUrl, {
+              method: "HEAD",
+              headers: this._buildHeaders({ Accept: "application/vnd.github.raw" }),
+              signal,
+            });
+          } catch {
+            return null;
+          }
+        }
+        try {
+          return await fetch(rawUrl, { method: "HEAD", signal });
+        } catch {
+          return null;
+        }
+      },
+      size: knownSize,
       contentType,
-      supportsRange: false,
+      supportsRange: true,
     });
   }
 
