@@ -181,9 +181,12 @@ export default {
       browserNative: "Browser Native",
       pdfjsLabel: "PDF.js",
       officeProvider: {
+        native: "Native Preview",
         microsoft: "Microsoft Office Online",
         google: "Google Docs",
       },
+      nativeRenderFailed: "Native preview failed",
+      tryExternalProvider: "Please try switching to Microsoft or Google preview",
       officePreview: "Office Preview",
       useMicrosoftPreview: "Use Microsoft Preview",
       useGooglePreview: "Use Google Preview",

@@ -245,7 +245,7 @@
       :key-mapper="(item, column, row, index) => item.id || index"
       class="masonry-wall-gallery"
     >
-      <template #default="{ item, index }">
+      <template #default="{ item }">
         <div class="masonry-item" @click="handleItemClick(item.image)" @contextmenu.prevent="(event) => handleContextMenu(event, item.image)">
           <div class="masonry-image-container">
             <!-- 选择框 -->

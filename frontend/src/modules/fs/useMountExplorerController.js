@@ -22,7 +22,7 @@ const invalidateCachesAfterMutation = () => {
   isDirRecord.clear();
 };
 
-// 存储配置发生变更（例如 GitHub ref 切换）时：历史/prefetch/tombstone 需要失效，
+// 存储配置发生变更（例如 GitHub ref 切换）时：历史/prefetch 需要失效，
 // 否则可能出现“旧目录快照短暂回显 → 后台刷新后消失”的闪现现象。
 let storageConfigChangeListenerBound = false;
 const bindStorageConfigChangeListener = () => {
@@ -31,53 +31,9 @@ const bindStorageConfigChangeListener = () => {
   storageConfigChangeListenerBound = true;
   window.addEventListener("cloudpaste:storage-config-changed", () => {
     invalidateCachesAfterMutation();
-    deletedTombstones.clear();
   });
 };
 bindStorageConfigChangeListener();
-
-// 一致性保障：删除/改名等写操作成功后，某些后端/驱动可能存在短暂的“列目录可见延迟”；
-// 为避免“已删除条目复活/闪烁”，前端会对已删除路径建立短期 tombstone，并在目录加载时过滤。
-const TOMBSTONE_TTL_MS = 2 * 60 * 1000;
-/** @type {Map<string, number>} canonicalPath -> timestamp */
-const deletedTombstones = new Map();
-
-const pruneTombstones = (now = Date.now()) => {
-  for (const [path, ts] of deletedTombstones.entries()) {
-    if (!ts || now - ts > TOMBSTONE_TTL_MS) {
-      deletedTombstones.delete(path);
-    }
-  }
-};
-
-const markDeletedTombstones = (paths) => {
-  if (!paths || !Array.isArray(paths) || paths.length === 0) return;
-  const now = Date.now();
-  pruneTombstones(now);
-  for (const p of paths) {
-    const canonical = normalizeFsPath(p);
-    if (!canonical || canonical === "/") continue;
-    deletedTombstones.set(canonical, now);
-  }
-};
-
-const sanitizeDirectoryData = (data) => {
-  if (!data || !Array.isArray(data.items)) return data;
-  pruneTombstones();
-  if (deletedTombstones.size === 0) return data;
-
-  // 过滤掉 tombstone 中的条目，避免闪烁/复活
-  const nextItems = data.items.filter((item) => {
-    const canonical = normalizeFsPath(item?.path);
-    return !deletedTombstones.has(canonical);
-  });
-
-  if (nextItems.length === data.items.length) return data;
-  return {
-    ...data,
-    items: nextItems,
-  };
-};
 
 const safeClone = (value) => {
   if (value == null) return value;
@@ -345,10 +301,6 @@ export function useMountExplorerController() {
     }
   };
 
-  const markDeleted = (paths) => {
-    markDeletedTombstones(paths);
-  };
-
   const removeItemsFromCurrentDirectory = (paths) => {
     if (!paths || !Array.isArray(paths) || paths.length === 0) return;
     const data = directoryData.value;
@@ -381,7 +333,7 @@ export function useMountExplorerController() {
     currentViewPath.value = snapshot.currentViewPath || "/";
     currentPath.value = snapshot.currentPath || "/";
 
-    directoryData.value = sanitizeDirectoryData(snapshot.directoryData || null);
+    directoryData.value = snapshot.directoryData || null;
     fileData.value = snapshot.fileData || null;
 
     error.value = snapshot.error || null;
@@ -416,7 +368,7 @@ export function useMountExplorerController() {
     currentViewPath.value = dirPath;
     currentPath.value = dirApiPath;
 
-    directoryData.value = sanitizeDirectoryData(snapshot.directoryData || null);
+    directoryData.value = snapshot.directoryData || null;
     fileData.value = null;
 
     error.value = null;
@@ -479,8 +431,7 @@ export function useMountExplorerController() {
       const data = await fsService.getDirectoryList(targetDirApi, { refresh });
       if (taskId != null && taskId !== activeRouteTask) return;
       if (data === null) return;
-      const sanitized = sanitizeDirectoryData(data);
-      stateMachine.onDirectoryLoaded(sanitized);
+      stateMachine.onDirectoryLoaded(data);
     } catch (e) {
       if (taskId != null && taskId !== activeRouteTask) return;
       if (e?.code === "FS_PATH_PASSWORD_REQUIRED") {
@@ -566,7 +517,7 @@ export function useMountExplorerController() {
       if (!data) return;
       if (stateMachine.viewState.value !== ViewState.DIRECTORY_LOADED) return;
       // 一致性优先：严格替换，保证删除/改名不会再次“复活”
-      directoryData.value = sanitizeDirectoryData(data);
+      directoryData.value = data;
     };
 
     // 优先使用 history 恢复（避免重复请求 + 恢复滚动位置）
@@ -613,12 +564,11 @@ export function useMountExplorerController() {
     }
   });
 
-  const resetCaches = () => {
-    historyMap.clear();
-    prefetchMap.clear();
-    isDirRecord.clear();
-    deletedTombstones.clear();
-  };
+    const resetCaches = () => {
+      historyMap.clear();
+      prefetchMap.clear();
+      isDirRecord.clear();
+    };
 
   // 认证域变更时清理缓存：避免跨账号/跨 basicPath 的“幽灵恢复”
   watch(
@@ -698,7 +648,6 @@ export function useMountExplorerController() {
     navigateToFile,
     stopPreview,
     invalidateCaches,
-    markDeleted,
     removeItemsFromCurrentDirectory,
     refreshDirectory,
     refreshCurrentRoute,

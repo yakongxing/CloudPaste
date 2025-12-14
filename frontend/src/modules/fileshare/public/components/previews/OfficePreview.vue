@@ -15,9 +15,23 @@
         </option>
       </select>
     </div>
-    <div class="office-iframe flex-grow relative" style="height: calc(100vh - 400px); min-height: 300px; background-color: white">
+    <div
+      class="office-iframe flex-grow relative"
+      :class="darkMode ? 'bg-gray-900' : 'bg-white'"
+      style="height: calc(100vh - 400px); min-height: 300px"
+    >
+      <OfficeNativeViewer
+        v-if="isNativeProvider"
+        :content-url="contentUrl"
+        :filename="filename"
+        :dark-mode="darkMode"
+        @load="handleNativeLoad"
+        @error="handleNativeError"
+        @unsupported="handleNativeUnsupported"
+      />
+
       <iframe
-        v-if="currentOfficePreviewUrl"
+        v-else-if="currentOfficePreviewUrl && currentOfficePreviewUrl !== 'native'"
         :src="currentOfficePreviewUrl"
         frameborder="0"
         class="w-full h-full"
@@ -25,6 +39,7 @@
         @load="handleOfficePreviewLoad"
         @error="handleOfficePreviewError"
       ></iframe>
+
       <div v-else class="w-full h-full flex items-center justify-center">
         <div class="text-center p-4">
           <p class="text-gray-500 mb-2">{{ officePreviewError || t("fileView.preview.office.loading") }}</p>
@@ -39,8 +54,11 @@
         </div>
       </div>
 
-      <!-- 加载中状态遮罩 -->
-      <div v-if="officePreviewLoading && currentOfficePreviewUrl" class="absolute inset-0 bg-white bg-opacity-70 flex items-center justify-center">
+      <!-- iframe 加载中状态遮罩 -->
+      <div
+        v-if="officePreviewLoading && !isNativeProvider && currentOfficePreviewUrl && currentOfficePreviewUrl !== 'native'"
+        class="absolute inset-0 bg-white bg-opacity-70 flex items-center justify-center"
+      >
         <div class="text-center">
           <svg class="animate-spin h-8 w-8 text-blue-500 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -62,7 +80,6 @@
       <p v-if="officePreviewError" class="text-red-500 mb-1">{{ officePreviewError }}</p>
       <p>
         {{ t("fileView.preview.office.previewTrouble") }}
-        <button @click="updateOfficePreviewUrls" class="text-blue-500 hover:underline">{{ t("fileView.preview.office.refreshPreview") }}</button>
         {{ t("fileView.preview.office.switchService") }}
         <a :href="downloadUrl" class="text-blue-500 hover:underline" target="_blank">{{ t("fileView.preview.office.downloadFile") }}</a>
         {{ t("fileView.preview.office.afterDownload") }}
@@ -75,6 +92,7 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { getExtension } from "@/utils/fileTypes.js";
+import { OfficeNativeViewer } from "@/components/office";
 
 const { t } = useI18n();
 
@@ -83,6 +101,11 @@ const props = defineProps({
   providers: {
     type: Object,
     default: () => ({}),
+  },
+  // native 渲染所需内容 URL（同源内容口）
+  contentUrl: {
+    type: String,
+    default: "",
   },
   // 原生浏览器预览 URL（直链 / 代理）
   nativeUrl: {
@@ -104,6 +127,10 @@ const props = defineProps({
   downloadUrl: {
     type: String,
     default: "",
+  },
+  darkMode: {
+    type: Boolean,
+    default: false,
   },
 });
 
@@ -180,9 +207,11 @@ const providerOptions = computed(() => {
 
   const providers = props.providers || {};
   for (const key of Object.keys(providers)) {
+    const labelKey = `mount.filePreview.officeProvider.${key}`;
+    const translated = t(labelKey);
     options.push({
       key,
-      label: key,
+      label: translated === labelKey ? key : translated,
       url: providers[key],
     });
   }
@@ -201,6 +230,8 @@ const currentOfficePreviewUrl = computed(() => {
   return current.url || "";
 });
 
+const isNativeProvider = computed(() => selectedProviderKey.value === "native" || currentOfficePreviewUrl.value === "native");
+
 const handleOfficePreviewLoad = () => {
   console.log("Office预览加载成功");
   officePreviewError.value = "";
@@ -215,13 +246,31 @@ const handleOfficePreviewError = (event) => {
   emit("error", event);
 };
 
+const handleNativeLoad = () => {
+  officePreviewError.value = "";
+  officePreviewLoading.value = false;
+  emit("load");
+};
+
+const handleNativeUnsupported = () => {
+  officePreviewLoading.value = false;
+  officePreviewError.value = t("mount.filePreview.tryExternalProvider") || "请尝试切换到其他预览渠道";
+};
+
+const handleNativeError = (err) => {
+  officePreviewLoading.value = false;
+  console.error("Office 本地预览失败:", err);
+  officePreviewError.value = t("mount.filePreview.nativeRenderFailed") || "本地预览失败";
+  emit("error", err);
+};
+
 onMounted(() => {
   const opts = providerOptions.value;
   if (opts.length) {
     selectedProviderKey.value = opts[0].key;
   }
 
-  if (currentOfficePreviewUrl.value) {
+  if (currentOfficePreviewUrl.value && !isNativeProvider.value) {
     officePreviewLoading.value = true;
   }
 });

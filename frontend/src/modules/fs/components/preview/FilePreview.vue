@@ -296,7 +296,7 @@
         ref="previewContentRef"
         class="preview-content border rounded-lg overflow-hidden transition-all duration-300 flex flex-col"
         :class="[darkMode ? 'border-gray-700' : 'border-gray-200']"
-        style="max-height: 600px; min-height: 400px"
+        :style="previewContainerStyle"
       >
         <!-- 全屏模式下的工具栏 -->
         <div v-if="isContentFullscreen && isText" class="fullscreen-toolbar p-3 border-b" :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'">
@@ -448,10 +448,15 @@
         </div>
 
         <!-- Office文件预览 -->
-        <div v-else-if="isOffice" ref="officePreviewRef" class="office-preview h-[900px] w-full">
+        <div v-else-if="isOffice" ref="officePreviewRef" class="office-preview h-full w-full">
           <OfficeFsPreview
             :preview-url="currentOfficePreviewUrl"
+            :content-url="officeContentUrl"
+            :filename="file.name"
+            :dark-mode="darkMode"
+            :provider-key="selectedOfficeProvider"
             :error-message="officePreviewError"
+            :is-fullscreen="isContentFullscreen"
             @load="handleOfficePreviewLoaded"
             @error="handleOfficePreviewError"
           />
@@ -563,6 +568,7 @@
 import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { usePreviewRenderers, useFilePreviewExtensions, useFileSave } from "@/composables/index.js";
+import { usePathPassword } from "@/composables/usePathPassword.js";
 import { useAuthStore } from "@/stores/authStore.js";
 import { getPreviewModeFromFilename, PREVIEW_MODES, SUPPORTED_ENCODINGS } from "@/utils/textUtils.js";
 import { isArchiveFile } from "@/utils/fileTypes.js";
@@ -574,6 +580,7 @@ import PdfFsPreview from "./PdfFsPreview.vue";
 import OfficeFsPreview from "./OfficeFsPreview.vue";
 
 const { t } = useI18n();
+const pathPassword = usePathPassword();
 
 // Props 定义
 const props = defineProps({
@@ -741,15 +748,34 @@ const currentPdfPreviewUrl = computed(() => {
 // Office 预览状态管理
 const selectedOfficeProvider = ref("");
 
+// Office native 渲染内容 URL：强制使用同源 /api/fs/content（避免跨域直链 fetch）
+const officeContentUrl = computed(() => {
+  const fsPath = props.file?.path || "";
+  if (!fsPath) return "";
+  let url = `/api/fs/content?path=${encodeURIComponent(fsPath)}`;
+
+  // 非管理员访问时，附加路径密码 token（如果存在）
+  if (!props.isAdmin) {
+    const token = pathPassword.getPathToken(fsPath);
+    if (token) {
+      url += `&path_token=${encodeURIComponent(token)}`;
+    }
+  }
+
+  return url;
+});
+
 // Office provider 选项
 const officeProviderOptions = computed(() => {
   const options = [];
   const providers = props.file?.documentPreview?.providers || {};
 
   for (const [key, url] of Object.entries(providers)) {
+    const labelKey = `mount.filePreview.officeProvider.${key}`;
+    const translated = t(labelKey);
     options.push({
       key,
-      label: key,
+      label: translated === labelKey ? key : translated,
       url,
     });
   }
@@ -843,7 +869,17 @@ const availableEncodings = computed(() => {
 const isContentFullscreen = ref(false);
 const previewContentRef = ref(null);
 
-// 动态计算文本预览的最大高度
+const previewContainerStyle = computed(() => {
+  if (isContentFullscreen.value) {
+    return { height: "100vh" };
+  }
+  return {
+    minHeight: "400px",    
+    maxHeight: "80vh",     
+  };
+});
+
+// 动态计算文本预览的最大高度（仅 TextPreview 使用）
 const dynamicMaxHeight = computed(() => {
   if (isContentFullscreen.value) {
     // 全屏模式下：100vh减去工具栏高度(60px)

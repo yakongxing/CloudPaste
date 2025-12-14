@@ -491,7 +491,6 @@ const {
   refreshCurrentRoute,
   prefetchDirectory,
   invalidateCaches,
-  markDeleted,
   removeItemsFromCurrentDirectory,
 } = useMountExplorerController();
 
@@ -735,6 +734,28 @@ const handleSearchItemClick = async (item) => {
  * 处理导航
  */
 const handleNavigate = async (path) => {
+  const normalizeFsPath = (p) => {
+    const raw = typeof p === "string" && p ? p : "/";
+    const withLeading = raw.startsWith("/") ? raw : `/${raw}`;
+    const collapsed = withLeading.replace(/\/{2,}/g, "/");
+    if (collapsed === "/") return "/";
+    return collapsed.replace(/\/+$/, "");
+  };
+
+  const isAncestorOrSame = (maybeAncestor, current) => {
+    const ancestor = normalizeFsPath(maybeAncestor);
+    const cur = normalizeFsPath(current);
+    if (ancestor === "/") return true;
+    return cur === ancestor || cur.startsWith(`${ancestor}/`);
+  };
+
+  // 面包屑/返回上级属于“回退导航”：
+  // - 优先保留目标目录的 history 快照
+  if (isAncestorOrSame(path, currentViewPath.value)) {
+    await navigateToPreserveHistory(path);
+    return;
+  }
+
   await navigateTo(path);
 };
 
@@ -941,8 +962,6 @@ const handleRename = async ({ item, newName }) => {
     if (result.success) {
       showMessage("success", result.message);
       invalidateCaches();
-      // 一致性优先：旧路径建立 tombstone，避免短暂“复活/闪烁”
-      markDeleted([oldPath]);
       // 重新加载当前目录内容
       await refreshDirectory();
     } else {
@@ -1007,10 +1026,8 @@ const confirmDelete = async () => {
     if (result.success) {
       showMessage("success", result.message);
 
-      // 删除属于写操作，禁止任何旧快照在后续导航中“复活”
+      // 删除属于写操作：清空前端缓存（秒开快照 + 可验证缓存），强制下一次导航以服务端为准
       invalidateCaches();
-      // 对被删除路径建立 tombstone，避免后端/驱动短暂延迟导致的“复活/闪烁”
-      markDeleted(itemsToDelete.value.map((item) => item?.path).filter(Boolean));
       // 立即从当前目录移除（减少等待与闪烁）
       removeItemsFromCurrentDirectory(itemsToDelete.value.map((item) => item?.path).filter(Boolean));
 

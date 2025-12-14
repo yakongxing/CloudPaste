@@ -1,29 +1,50 @@
 <template>
   <div class="office-fs-preview-wrapper h-full">
+    <!-- native 预览区 -->
+    <div v-if="isNativeProvider" class="office-native-container h-full">
+      <OfficeNativeViewer
+        v-if="contentUrl && filename"
+        :content-url="contentUrl"
+        :filename="filename"
+        :dark-mode="darkMode"
+        :is-fullscreen="isFullscreen"
+        @load="emit('load')"
+        @error="emit('error', $event)"
+        @unsupported="handleNativeUnsupported"
+      />
+
+      <div v-else class="h-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-lg">
+        <div class="text-center p-4">
+          <p class="text-gray-600 dark:text-gray-300 mb-2">
+            {{ t("mount.filePreview.nativeRenderFailed") || "本地预览失败" }}
+          </p>
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            {{ t("mount.filePreview.tryExternalProvider") || "请尝试切换到其他预览渠道" }}
+          </p>
+        </div>
+      </div>
+    </div>
+
     <!-- iframe 预览区 -->
-    <div v-if="previewUrl" class="office-iframe-container h-full relative">
+    <div v-else-if="previewUrl && previewUrl !== 'native'" class="office-iframe-container h-full relative">
       <iframe
         :src="previewUrl"
         frameborder="0"
         class="w-full h-full"
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation"
-        @load="handleLoad"
-        @error="handleError"
+        @load="handleIframeLoad"
+        @error="handleIframeError"
       ></iframe>
 
-      <!-- 加载中遮罩 -->
-      <div v-if="loading" class="absolute inset-0 bg-white dark:bg-gray-800 bg-opacity-70 flex items-center justify-center">
-        <div class="text-center">
-          <svg class="animate-spin h-8 w-8 text-blue-500 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path
-              class="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 0 0 4 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
-          </svg>
-          <p class="text-blue-600 dark:text-blue-400">{{ $t("mount.filePreview.officeLoading") || "加载 Office 文件中..." }}</p>
-        </div>
+      <div v-if="iframeLoading" class="absolute inset-0 bg-white dark:bg-gray-800 bg-opacity-70 flex items-center justify-center">
+        <svg class="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path
+            class="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 0 0 4 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+          ></path>
+        </svg>
       </div>
     </div>
 
@@ -52,37 +73,73 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { OfficeNativeViewer } from "@/components/office";
 
 const { t } = useI18n();
 
 const props = defineProps({
-  // 预览 URL
   previewUrl: {
     type: String,
     default: "",
   },
-  // 错误信息
+  contentUrl: {
+    type: String,
+    default: "",
+  },
+  filename: {
+    type: String,
+    default: "",
+  },
+  darkMode: {
+    type: Boolean,
+    default: false,
+  },
+  providerKey: {
+    type: String,
+    default: "",
+  },
   errorMessage: {
     type: String,
     default: "",
+  },
+  isFullscreen: {
+    type: Boolean,
+    default: false,
   },
 });
 
 const emit = defineEmits(["load", "error"]);
 
-const loading = ref(true);
+//用于 iframe 的 loading 状态
+const iframeLoading = ref(true);
 
-const handleLoad = () => {
-  loading.value = false;
+const isNativeProvider = computed(() => props.providerKey === "native" || props.previewUrl === "native");
+
+const handleIframeLoad = () => {
+  iframeLoading.value = false;
   emit("load");
 };
 
-const handleError = (event) => {
-  loading.value = false;
+const handleIframeError = (event) => {
+  iframeLoading.value = false;
   emit("error", event);
 };
+
+const handleNativeUnsupported = () => {
+  emit("error", new Error(t("mount.filePreview.tryExternalProvider") || "请尝试切换到其他预览渠道"));
+};
+
+// 重置加载状态
+watch(
+  () => props.previewUrl,
+  () => {
+    if (!isNativeProvider.value) {
+      iframeLoading.value = true;
+    }
+  },
+);
 </script>
 
 <style scoped>

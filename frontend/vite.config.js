@@ -406,8 +406,7 @@ export default defineConfig(({ command, mode }) => {
       },
     },
     optimizeDeps: {
-      include: ["vue-i18n", "chart.js", "qrcode", "mime-db"],
-      // 移除vditor排除配置，因为现在从本地dist目录加载
+      include: ["vue-i18n", "chart.js", "qrcode", "mime-db", "docx-preview"],
     },
     build: {
       outDir: 'dist', // 显式指定输出目录
@@ -425,6 +424,7 @@ export default defineConfig(({ command, mode }) => {
             "vendor-vue": ["vue", "vue-router", "vue-i18n"],
             "vendor-charts": ["chart.js", "vue-chartjs"],
             "vendor-utils": ["qrcode", "file-saver", "docx", "html-to-image"],
+            "office-viewer": ["docx-preview", "@vue-office/excel", "@vue-office/pptx"],
           },
         },
       },

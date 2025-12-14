@@ -413,6 +413,8 @@ const previewComponentProps = computed(() => {
       filename: props.fileInfo.filename,
       useProxy: props.fileInfo.use_proxy,
       downloadUrl: fileshareService.getPermanentDownloadUrl(props.fileInfo),
+      contentUrl: effectiveContentUrl,
+      darkMode: props.darkMode,
     };
   }
 
