@@ -448,7 +448,7 @@
         </div>
 
         <!-- Office文件预览 -->
-        <div v-else-if="isOffice" ref="officePreviewRef" class="office-preview h-full w-full">
+        <div v-else-if="isOffice" ref="officePreviewRef" class="office-preview">
           <OfficeFsPreview
             :preview-url="currentOfficePreviewUrl"
             :content-url="officeContentUrl"
@@ -1049,6 +1049,16 @@ onBeforeUnmount(() => {
   border: none;
 }
 
+/* 全屏模式下 Office 预览填满容器 */
+:deep(:fullscreen .office-preview) {
+  height: 100%;
+}
+
+:deep(:fullscreen .office-fs-preview-wrapper) {
+  height: 100%;
+  max-height: none;
+}
+
 /* 确保全屏模式下的控制栏固定在顶部 */
 :deep(:fullscreen .sticky) {
   position: sticky;
@@ -1092,6 +1102,14 @@ button:hover svg {
 /* Markdown预览样式 */
 .markdown-preview {
   line-height: 1.6;
+}
+
+/* Office预览区样式 - 使用 flex 布局确保子组件正确填充 */
+.office-preview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Vditor相关样式 */

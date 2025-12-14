@@ -1,22 +1,26 @@
 <template>
-  <div class="office-native-viewer h-full w-full" :class="{ dark: darkMode }">
-    <div v-if="loading" class="h-full w-full flex items-center justify-center">
+  <div class="office-native-viewer">
+    <!-- 加载状态 -->
+    <div v-if="loading" class="loading-overlay">
       <svg class="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
       </svg>
     </div>
 
-    <div v-else-if="errorMessage" class="h-full w-full flex items-center justify-center">
+    <!-- 错误状态 -->
+    <div v-else-if="errorMessage" class="loading-overlay">
       <div class="text-center p-4">
-        <div class="text-sm text-red-600 dark:text-red-400">{{ errorMessage }}</div>
+        <div class="text-sm text-red-600">{{ errorMessage }}</div>
       </div>
     </div>
 
-    <div v-else class="h-full w-full overflow-hidden relative">
+    <!-- PPT 内容 -->
+    <div v-else class="pptx-content">
       <VueOfficePptx v-if="showViewer" :src="objectUrl" class="h-full w-full" @rendered="handleRendered" @error="handleError" />
 
-      <div v-if="isRemounting" class="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-gray-900/50">
+      <!-- 重挂载加载层 -->
+      <div v-if="isRemounting" class="loading-overlay">
         <svg class="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -33,8 +37,6 @@ import VueOfficePptx from "@vue-office/pptx";
 
 const props = defineProps({
   contentUrl: { type: String, required: true },
-  filename: { type: String, default: "" },
-  darkMode: { type: Boolean, default: false },
   isFullscreen: { type: Boolean, default: false },
 });
 
@@ -100,11 +102,30 @@ onUnmounted(() => {
 
 <style scoped>
 .office-native-viewer {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
   background: #ffffff;
 }
 
-.office-native-viewer.dark {
-  background: #111827;
+.pptx-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 加载/错误覆盖层 - 绝对定位居中 */
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.7);
 }
 </style>
+
 

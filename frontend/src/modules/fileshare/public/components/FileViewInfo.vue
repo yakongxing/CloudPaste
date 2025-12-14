@@ -189,7 +189,7 @@ import TextPreview from "./previews/TextPreview.vue";
 import CodePreview from "./previews/CodePreview.vue";
 import MarkdownPreview from "./previews/MarkdownPreview.vue";
 import HtmlPreview from "./previews/HtmlPreview.vue";
-import OfficePreview from "./previews/OfficePreview.vue";
+import OfficeSharePreview from "./previews/OfficeSharePreview.vue";
 import GenericPreview from "./previews/GenericPreview.vue";
 
 const props = defineProps({
@@ -291,7 +291,7 @@ const currentPreviewComponent = computed(() => {
     MarkdownPreview,
     HtmlPreview,
     TextPreview,
-    OfficePreview,
+    OfficeSharePreview,
     GenericPreview,
   };
 
@@ -408,13 +408,9 @@ const previewComponentProps = computed(() => {
   if (isOfficeFile.value) {
     return {
       providers: props.fileInfo.documentPreview?.providers || {},
-      nativeUrl: previewUrl,
-      mimetype: props.fileInfo.mimetype,
       filename: props.fileInfo.filename,
-      useProxy: props.fileInfo.use_proxy,
       downloadUrl: fileshareService.getPermanentDownloadUrl(props.fileInfo),
       contentUrl: effectiveContentUrl,
-      darkMode: props.darkMode,
     };
   }
 
