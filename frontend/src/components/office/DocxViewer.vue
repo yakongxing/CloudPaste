@@ -69,11 +69,16 @@ onMounted(async () => {
     await renderAsync(buffer, containerRef.value, null, {
       className: "docx-preview",
       breakPages: true,
-      renderComments: true,
+      ignoreLastRenderedPageBreak: false, // 编辑器插入的分页符
+      experimental: true, // 启用实验性功能（tab stops 计算），提升排版准确性
+      renderComments: true, // 渲染文档评论（协作批注）
+      renderChanges: false, // 渲染修订记录（插入/删除标记）
       renderHeaders: true,
       renderFooters: true,
       renderFootnotes: true,
       renderEndnotes: true,
+      useBase64URL: false, // 使用 URL.createObjectURL 以获得更好的性能
+      trimXmlDeclaration: true, // 移除 XML 声明以避免解析问题
     });
 
     loading.value = false;

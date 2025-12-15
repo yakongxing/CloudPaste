@@ -8,6 +8,7 @@ import { getEncryptionSecret } from "../../utils/environmentUtils.js";
 import { LinkService } from "../../storage/link/LinkService.js";
 import { resolveDocumentPreview } from "../../services/documentPreviewService.js";
 import { StorageStreaming, STREAMING_CHANNELS } from "../../storage/streaming/index.js";
+import { normalizePath as normalizeFsPath } from "../../storage/fs/utils/PathResolver.js";
 
 const fnv1a32Init = () => 0x811c9dc5;
 
@@ -71,7 +72,8 @@ export const registerBrowseRoutes = (router, helpers) => {
 
   router.get("/api/fs/list", async (c) => {
     const db = c.env.DB;
-    const path = c.req.query("path") || "/";
+    const rawPath = c.req.query("path") || "/";
+    const path = normalizeFsPath(rawPath, true);
     const refresh = getQueryBool(c, "refresh", false);
     const userInfo = c.get("userInfo");
     const { userIdOrInfo, userType } = getServiceParams(userInfo);
