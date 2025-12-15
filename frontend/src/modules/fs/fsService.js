@@ -178,22 +178,26 @@ export function useFsService() {
   /**
    * 获取单个文件信息
    * @param {string} path
-   * @returns {Promise<FsDirectoryItem>}
+   * @param {{ headers?: Record<string,string>; signal?: AbortSignal; cancelPrevious?: boolean }} [options]
+   * - cancelPrevious=true：保持旧行为（新的请求会取消上一条 fileInfo 请求），适合“单文件预览/详情面板”
+   * - cancelPrevious=false：允许并发请求，适合“图廊懒加载/批量预取”
+   * @returns {Promise<FsDirectoryItem|null>}
    */
-  const getFileInfo = async (path) => {
+  const getFileInfo = async (path, options = {}) => {
     const isAdmin = authStore.isAdmin;
     const normalizedPath = path || "/";
 
-    // 取消之前的文件信息请求，避免竞态条件
-    cancelFileInfoRequest();
-
     // 创建新的 AbortController
     const controller = new AbortController();
-    abortControllers.fileInfo = controller;
+    const shouldCancelPrevious = options.cancelPrevious !== false;
+    if (shouldCancelPrevious) {
+      cancelFileInfoRequest();
+      abortControllers.fileInfo = controller;
+    }
 
     /** @type {{ headers?: Record<string,string>; signal?: AbortSignal }} */
     const requestOptions = {
-      signal: controller.signal,
+      signal: options.signal || controller.signal,
     };
 
     // 非管理员访问时，为文件路径附加路径密码 token（如果存在）
@@ -204,6 +208,14 @@ export function useFsService() {
           "X-FS-Path-Token": token,
         };
       }
+    }
+
+    // 允许调用方追加 headers（如自定义 token/trace 等）
+    if (options.headers) {
+      requestOptions.headers = {
+        ...(requestOptions.headers || {}),
+        ...options.headers,
+      };
     }
 
     try {

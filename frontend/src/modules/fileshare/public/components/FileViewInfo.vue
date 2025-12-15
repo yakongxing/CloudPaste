@@ -418,6 +418,10 @@ const previewComponentProps = computed(() => {
     return {
       ...baseProps,
       previewUrl,
+      darkMode: props.darkMode,
+      // Live Photo 支持：videoUrl 需要从外部传入（如果有配对的视频文件）
+      // 在单文件分享场景中，通常不会有配对的视频文件
+      videoUrl: "",
     };
   }
 

@@ -36,14 +36,7 @@
                 d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
               />
             </svg>
-            <svg v-else class="animate-spin w-4 h-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path
-                class="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
+            <div v-else class="animate-spin rounded-full w-4 h-4 mr-1.5 border-b-2 border-current"></div>
             <span>{{ isGeneratingPreview ? t("mount.filePreview.generating") : t("mount.filePreview.directPreview") }}</span>
           </button>
 
@@ -62,14 +55,7 @@
                 d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
               />
             </svg>
-            <svg v-else class="animate-spin w-4 h-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path
-                class="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
+            <div v-else class="animate-spin rounded-full w-4 h-4 mr-1.5 border-b-2 border-current"></div>
             <span>{{ isCreatingShare ? t("mount.filePreview.creatingShare") : t("mount.filePreview.createShare") }}</span>
           </button>
         </div>
@@ -149,14 +135,7 @@
               :title="$t('mount.filePreview.saveFileShortcut')"
             >
               <!-- Loading图标 -->
-              <svg v-if="isSaving" class="w-4 h-4 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
+              <div v-if="isSaving" class="w-4 h-4 mr-1 animate-spin rounded-full border-b-2 border-current"></div>
               <!-- 保存图标 -->
               <svg v-else class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -347,14 +326,7 @@
                 :title="$t('mount.filePreview.saveFileShortcut')"
               >
                 <!-- Loading图标 -->
-                <svg v-if="isSaving" class="w-4 h-4 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path
-                    class="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
+                <div v-if="isSaving" class="w-4 h-4 mr-1 animate-spin rounded-full border-b-2 border-current"></div>
                 <!-- 保存图标 -->
                 <svg v-else class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -393,10 +365,27 @@
           </div>
         </div>
 
-        <!-- 图片预览 -->
+        <!-- 图片预览 (含 Live Photo 支持) -->
         <div v-else-if="isImage" class="flex-1 flex justify-center items-center p-4">
+          <!-- Live Photo 预览 -->
+          <LivePhotoViewer
+            v-if="isLivePhoto && authenticatedPreviewUrl && livePhotoVideoUrl"
+            :photo-src="authenticatedPreviewUrl"
+            :video-src="livePhotoVideoUrl"
+            :dark-mode="darkMode"
+            :max-width="'100%'"
+            :show-badge="true"
+            :show-badge-text="true"
+            :show-progress="true"
+            :lazy-load="true"
+            :enable-vibration="true"
+            class="max-w-full max-h-[600px]"
+            @load="handleContentLoaded"
+            @error="handleContentError"
+          />
+          <!-- 普通图片预览 -->
           <img
-            v-if="authenticatedPreviewUrl"
+            v-else-if="authenticatedPreviewUrl"
             :src="authenticatedPreviewUrl"
             :alt="file.name"
             class="max-w-full max-h-[600px] object-contain"
@@ -570,6 +559,7 @@ import { useI18n } from "vue-i18n";
 import { usePreviewRenderers, useFilePreviewExtensions, useFileSave } from "@/composables/index.js";
 import { usePathPassword } from "@/composables/usePathPassword.js";
 import { useAuthStore } from "@/stores/authStore.js";
+import { useFsService } from "@/modules/fs/fsService.js";
 import { getPreviewModeFromFilename, PREVIEW_MODES, SUPPORTED_ENCODINGS } from "@/utils/textUtils.js";
 import { isArchiveFile } from "@/utils/fileTypes.js";
 import AudioPreview from "./AudioPreview.vue";
@@ -578,9 +568,12 @@ import TextPreview from "./TextPreview.vue";
 import ArchivePreview from "./ArchivePreview.vue";
 import PdfFsPreview from "./PdfFsPreview.vue";
 import OfficeFsPreview from "./OfficeFsPreview.vue";
+import { LivePhotoViewer } from "@/components/common/LivePhoto";
+import { detectLivePhoto, isLivePhotoImage } from "@/utils/livePhotoUtils.js";
 
 const { t } = useI18n();
 const pathPassword = usePathPassword();
+const fsService = useFsService();
 
 // Props 定义
 const props = defineProps({
@@ -952,6 +945,51 @@ const isMarkdown = computed(() => {
 const isArchive = computed(() => {
   return props.file?.name && isArchiveFile(props.file.name);
 });
+
+// Live Photo 检测
+const livePhotoData = computed(() => {
+  if (!props.file?.name || !isLivePhotoImage(props.file.name)) {
+    return { isLivePhoto: false, videoFile: null };
+  }
+  return detectLivePhoto(props.file, props.directoryItems);
+});
+
+const isLivePhoto = computed(() => livePhotoData.value.isLivePhoto);
+
+// Live Photo 视频 URL（注意：<video> 标签无法携带自定义 header；API Key/路径密码场景必须走“预签名直链”）
+const livePhotoVideoUrl = ref("");
+let livePhotoVideoUrlRequestId = 0;
+
+watch(
+  () => livePhotoData.value.videoFile,
+  async (videoFile) => {
+    const currentRequestId = ++livePhotoVideoUrlRequestId;
+
+    if (!videoFile) {
+      livePhotoVideoUrl.value = "";
+      return;
+    }
+
+    // 走 getFileLink 获取预签名 URL（适配 apikey/路径密码）
+    // 说明：当前目录列表的 FsDirectoryItem 类型不包含 previewUrl，因此这里不做 previewUrl 复用分支（避免死代码与误解）。
+    const videoPath = typeof videoFile.path === "string" ? videoFile.path : "";
+    if (!videoPath) {
+      livePhotoVideoUrl.value = "";
+      return;
+    }
+
+    try {
+      const url = await fsService.getFileLink(videoPath, null, false);
+      if (currentRequestId !== livePhotoVideoUrlRequestId) return;
+      livePhotoVideoUrl.value = url || "";
+    } catch (error) {
+      if (currentRequestId !== livePhotoVideoUrlRequestId) return;
+      console.error("[LivePhoto] 获取视频直链失败:", error);
+      livePhotoVideoUrl.value = "";
+    }
+  },
+  { immediate: true }
+);
 
 // 监听模式变化
 watch(textPreviewMode, (newMode) => {

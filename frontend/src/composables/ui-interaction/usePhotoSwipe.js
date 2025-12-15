@@ -13,6 +13,14 @@ export function usePhotoSwipe() {
   const lightbox = ref(null);
   const isInitialized = ref(false);
 
+  // 当前打开会话（每次 openPhotoSwipe 会刷新）
+  const session = {
+    images: /** @type {Array<any>} */ ([]),
+    imageStates: /** @type {Map<string, any> | null} */ (null),
+    loadImageUrl: /** @type {Function | null} */ (null),
+    abortController: /** @type {AbortController | null} */ (null),
+  };
+
   /**
    * 初始化PhotoSwipe
    *
@@ -61,19 +69,48 @@ export function usePhotoSwipe() {
         // 动画配置
         showAnimationDuration: 333,
         hideAnimationDuration: 333,
+
+        // 预加载邻近图片（官方推荐用于大图廊：只预加载相邻 slide，而不是全量预取）
+        preload: [1, 2],
       });
 
       // 监听PhotoSwipe事件
       setupPhotoSwipeEvents();
 
+      // ✅ dataSource + itemData filter：避免打开时全量构建 slide 数据（按需生成）
+      setupPhotoSwipeFilters();
+
       // 初始化
       lightbox.value.init();
       isInitialized.value = true;
-
-      console.log("✅ PhotoSwipe初始化成功");
     } catch (error) {
       console.error("❌ PhotoSwipe初始化失败:", error);
     }
+  };
+
+  /**
+   * 注册过滤器：按 index 生成 slide itemData
+   */
+  const setupPhotoSwipeFilters = () => {
+    if (!lightbox.value) return;
+
+    lightbox.value.addFilter("itemData", (itemData, index) => {
+      const image = session.images[index] || itemData;
+      const state = session.imageStates ? session.imageStates.get(image?.path) : null;
+
+      const width = state?.naturalWidth || 1200;
+      const height = state?.naturalHeight || 800;
+      const src = state?.status === "loaded" ? state?.url || "" : "";
+
+      return {
+        src,
+        width,
+        height,
+        alt: image?.name || "",
+        title: image?.name || "",
+        __cloudpasteImage: image,
+      };
+    });
   };
 
   /**
@@ -82,30 +119,73 @@ export function usePhotoSwipe() {
   const setupPhotoSwipeEvents = () => {
     if (!lightbox.value) return;
 
-    // 监听打开事件
-    lightbox.value.on("beforeOpen", () => {
-      console.log("🔍 PhotoSwipe正在打开");
-    });
-
-    // 监听关闭事件
+    // 关闭：控制会话 Abort（避免关闭后继续请求）
     lightbox.value.on("close", () => {
-      console.log("🔍 PhotoSwipe已关闭");
+      session.abortController?.abort();
+      session.abortController = null;
+      session.images = [];
+      session.imageStates = null;
+      session.loadImageUrl = null;
     });
 
-    // 监听图片加载错误
-    lightbox.value.on("contentLoadError", (e) => {
-      console.error("🔍 PhotoSwipe图片加载失败", e);
+    // 按需加载：拦截 contentLoad，自行异步填充 src（避免 open 时全量 await）
+    lightbox.value.on("contentLoad", (e) => {
+      const content = e?.content;
+      const image = content?.data?.__cloudpasteImage;
+      if (!content || !image) return;
+
+      e.preventDefault();
+
+      const img = document.createElement("img");
+      img.className = "pswp__img";
+      img.decoding = "async";
+      img.alt = image?.name || "";
+
+      content.element = img;
+      content.state = "loading";
+
+      const signal = session.abortController?.signal;
+
+      void (async () => {
+        try {
+          const src = await ensureImageSrc(image, { signal });
+          if (signal?.aborted) return;
+
+          img.onload = () => {
+            // 回写尺寸，改善后续 zoom/布局
+            if (session.imageStates && image?.path) {
+              const prev = session.imageStates.get(image.path) || null;
+              session.imageStates.set(image.path, {
+                ...(prev || { status: "loaded", url: src }),
+                status: "loaded",
+                url: src,
+                naturalWidth: img.naturalWidth,
+                naturalHeight: img.naturalHeight,
+                aspectRatio: img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : undefined,
+              });
+            }
+            content.onLoaded();
+          };
+
+          img.onerror = () => {
+            content.onError();
+          };
+
+          img.src = src;
+        } catch (error) {
+          content.onError();
+        }
+      })();
     });
 
-    // 监听索引变化
+    // 索引变化：预取相邻项（配合 preload，让用户滑动更顺）
     lightbox.value.on("change", () => {
       const pswp = lightbox.value.pswp;
-      if (pswp) {
-        console.log(`🔍 PhotoSwipe切换到第${pswp.currIndex + 1}张图片`);
-      }
+      if (!pswp) return;
+      void prefetchAround(pswp.currIndex);
     });
 
-    // ✅ 注册自定义UI元素（官方推荐方式）
+    // 注册自定义UI元素
     lightbox.value.on("uiRegister", () => {
       registerCustomUIElements();
     });
@@ -131,8 +211,6 @@ export function usePhotoSwipe() {
 
       // 注册图片信息显示
       registerImageInfo(pswp);
-
-      console.log("✅ PhotoSwipe自定义UI元素注册成功");
     } catch (error) {
       console.error("❌ PhotoSwipe自定义UI元素注册失败:", error);
     }
@@ -158,209 +236,67 @@ export function usePhotoSwipe() {
       await nextTick();
     }
 
-    try {
-      // 转换图片数据为PhotoSwipe格式
-      const photoSwipeItems = await convertImagesToPhotoSwipeFormat(images, imageStates, loadImageUrl);
+    // 更新会话上下文（供 filter/contentLoad/change 使用）
+    session.images = images;
+    session.imageStates = imageStates;
+    session.loadImageUrl = loadImageUrl;
+    session.abortController?.abort();
+    session.abortController = new AbortController();
 
-      if (photoSwipeItems.length === 0) {
-        console.warn("⚠️ PhotoSwipe: 没有有效的图片数据");
-        return;
-      }
+    const validStartIndex = Math.max(0, Math.min(startIndex, images.length - 1));
 
-      // 验证起始索引
-      const validStartIndex = Math.max(0, Math.min(startIndex, photoSwipeItems.length - 1));
-
-      console.log(`🔍 PhotoSwipe打开预览: ${photoSwipeItems.length}张图片, 起始索引: ${validStartIndex}`);
-
-      // 使用PhotoSwipe的动态模式打开
-      lightbox.value.loadAndOpen(validStartIndex, photoSwipeItems);
-    } catch (error) {
-      console.error("❌ PhotoSwipe打开失败:", error);
-    }
-  };
-
-  /**
-   * 将图片数据转换为PhotoSwipe格式
-   * 按照官方文档要求的数据结构
-   * @param {Array} images - 原始图片数组
-   * @param {Map} imageStates - 图片状态管理Map（可选）
-   * @param {Function} loadImageUrl - 图片URL加载函数（可选）
-   * @returns {Array} PhotoSwipe格式的图片数组
-   */
-  const convertImagesToPhotoSwipeFormat = async (images, imageStates = null, loadImageUrl = null) => {
-    const photoSwipeItems = [];
-
-    for (const image of images) {
+    // 先确保“当前图片”可立即展示（避免打开后长时间空白）
+    const image = images[validStartIndex];
+    if (image) {
       try {
-        // 获取图片URL和尺寸信息
-        const imageData = await getImageDataForPhotoSwipe(image, imageStates, loadImageUrl);
-
-        if (imageData) {
-          photoSwipeItems.push(imageData);
-        }
+        await ensureImageSrc(image, { signal: session.abortController.signal, priority: "high" });
       } catch (error) {
-        console.warn(`⚠️ 跳过无效图片: ${image.name}`, error);
+        // 即便失败也允许打开，交给 contentLoad error UI 处理
       }
     }
 
-    return photoSwipeItems;
+    // 打开（dataSource 直接传 images，由 itemData filter 转换）
+    lightbox.value.loadAndOpen(validStartIndex, images);
+
+    // 后台预取邻近项
+    void prefetchAround(validStartIndex);
   };
 
   /**
-   * 获取单张图片的PhotoSwipe数据
-   * @param {Object} image - 图片对象
-   * @param {Map} imageStates - 图片状态管理Map（可选）
-   * @param {Function} loadImageUrl - 图片URL加载函数（可选）
-   * @returns {Object|null} PhotoSwipe格式的图片数据
+   * 确保某张图片具备可渲染的 src（按需触发 loadImageUrl）
+   * @param {any} image
+   * @param {{ signal?: AbortSignal; priority?: "high" | "normal" }} [options]
+   * @returns {Promise<string>}
    */
-  const getImageDataForPhotoSwipe = async (image, imageStates = null, loadImageUrl = null) => {
-    try {
-      // 获取图片URL（使用现有的状态管理）
-      let imageUrl = getImageUrl(image, imageStates);
+  const ensureImageSrc = async (image, options = {}) => {
+    const signal = options.signal;
+    if (signal?.aborted) throw new Error("aborted");
 
-      // 如果没有URL且提供了加载函数，尝试加载
-      if (!imageUrl && loadImageUrl && imageStates) {
-        console.log(`🔄 PhotoSwipe: 为图片 ${image.name} 加载URL`);
-        await loadImageUrl(image);
-        // 重新获取URL
-        imageUrl = getImageUrl(image, imageStates);
-      }
+    const state = session.imageStates ? session.imageStates.get(image?.path) : null;
+    if (state?.status === "loaded" && state?.url) return state.url;
 
-      if (!imageUrl) {
-        console.warn(`⚠️ 图片URL为空: ${image.name}`);
-        return null;
-      }
-
-      // 获取图片尺寸
-      const dimensions = await getImageDimensions(image, imageUrl, imageStates);
-
-      // 构建PhotoSwipe数据格式
-      const photoSwipeItem = {
-        src: imageUrl,
-        width: dimensions.width,
-        height: dimensions.height,
-        alt: image.name,
-        // 可选：添加标题
-        title: image.name,
-        // 可选：添加原始图片对象引用
-        originalImage: image,
-      };
-
-      return photoSwipeItem;
-    } catch (error) {
-      console.error(`❌ 获取图片数据失败: ${image.name}`, error);
-      return null;
+    if (typeof session.loadImageUrl === "function") {
+      await session.loadImageUrl(image, { priority: options.priority || "high", signal });
     }
+
+    const nextState = session.imageStates ? session.imageStates.get(image?.path) : null;
+    if (nextState?.status === "loaded" && nextState?.url) return nextState.url;
+    throw new Error("image src unavailable");
   };
 
-  /**
-   * 获取图片URL
-   * 复用现有的图片状态管理逻辑 - 只从状态管理中获取，不使用图片对象中的URL
-   * @param {Object} image - 图片对象
-   * @param {Map} imageStates - 图片状态管理Map（可选）
-   * @returns {string|null} 图片URL
-   */
-  const getImageUrl = (image, imageStates = null) => {
-    // 只从状态管理中获取URL，确保懒加载生效
-    if (imageStates) {
-      const imageState = imageStates.get(image.path);
-      if (imageState?.status === "loaded" && imageState.url) {
-        return imageState.url;
-      }
+  const prefetchAround = async (index) => {
+    const signal = session.abortController?.signal;
+    if (!Array.isArray(session.images) || session.images.length === 0) return;
+    if (signal?.aborted) return;
+
+    // 与 preload 配合：主观再补一层预取
+    const candidates = [index - 2, index - 1, index + 1, index + 2];
+    for (const i of candidates) {
+      if (i < 0 || i >= session.images.length) continue;
+      const image = session.images[i];
+      if (!image) continue;
+      void ensureImageSrc(image, { signal, priority: "normal" });
     }
-    return null;
-  };
-
-  /**
-   * 获取图片尺寸
-   * PhotoSwipe要求预定义图片尺寸
-   * @param {Object} image - 图片对象
-   * @param {string} imageUrl - 图片URL
-   * @param {Map} imageStates - 图片状态管理Map（可选）
-   * @returns {Object} 包含width和height的对象
-   */
-  const getImageDimensions = async (image, imageUrl, imageStates = null) => {
-    // 如果有状态管理，优先从状态中获取尺寸
-    if (imageStates) {
-      const imageState = imageStates.get(image.path);
-      if (imageState?.naturalWidth && imageState?.naturalHeight) {
-        return {
-          width: imageState.naturalWidth,
-          height: imageState.naturalHeight,
-        };
-      }
-    }
-
-    // 如果图片对象中已有尺寸信息，直接使用
-    if (image.naturalWidth && image.naturalHeight) {
-      return {
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-      };
-    }
-
-    // 如果图片状态中有尺寸信息，使用它
-    if (image.aspectRatio && image.naturalWidth) {
-      return {
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-      };
-    }
-
-    // 尝试从图片元素获取尺寸
-    try {
-      const dimensions = await loadImageDimensions(imageUrl);
-
-      // 如果获取到的尺寸有效，保存到状态管理中
-      if (imageStates && dimensions.width > 0 && dimensions.height > 0) {
-        const currentState = imageStates.get(image.path);
-        if (currentState) {
-          imageStates.set(image.path, {
-            ...currentState,
-            naturalWidth: dimensions.width,
-            naturalHeight: dimensions.height,
-          });
-        }
-      }
-
-      return dimensions;
-    } catch (error) {
-      console.warn(`⚠️ 无法获取图片尺寸: ${image.name}, 使用默认尺寸`);
-      // 返回默认尺寸
-      return {
-        width: 1200,
-        height: 800,
-      };
-    }
-  };
-
-  /**
-   * 异步加载图片并获取尺寸
-   * @param {string} imageUrl - 图片URL
-   * @returns {Promise<Object>} 包含width和height的Promise
-   */
-  const loadImageDimensions = (imageUrl) => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-
-      img.onload = () => {
-        resolve({
-          width: img.naturalWidth,
-          height: img.naturalHeight,
-        });
-      };
-
-      img.onerror = () => {
-        reject(new Error("图片加载失败"));
-      };
-
-      // 设置超时
-      setTimeout(() => {
-        reject(new Error("图片加载超时"));
-      }, 5000);
-
-      img.src = imageUrl;
-    });
   };
 
   /**
@@ -371,7 +307,6 @@ export function usePhotoSwipe() {
       lightbox.value.destroy();
       lightbox.value = null;
       isInitialized.value = false;
-      console.log("🔍 PhotoSwipe已销毁");
     }
   };
 
@@ -432,7 +367,6 @@ export function usePhotoSwipe() {
             imageElement.style.transform = combinedTransform;
             imageElement.style.transition = "transform 0.3s ease";
 
-            console.log(`🔄 图片旋转到 ${newRotation}度`);
           } else {
             console.warn("⚠️ 旋转按钮: 图片元素不可用");
           }
@@ -498,7 +432,6 @@ export function usePhotoSwipe() {
             imageElement.style.transform = combinedTransform;
             imageElement.style.transition = "transform 0.3s ease";
 
-            console.log(`🔄 图片${newFlip ? "已翻转" : "取消翻转"}`);
           } else {
             console.warn("⚠️ 翻转按钮: 图片元素不可用");
           }
@@ -564,7 +497,6 @@ export function usePhotoSwipe() {
           // 初始更新
           updateImageInfo();
 
-          console.log("✅ 图片信息显示初始化成功");
         } catch (error) {
           console.error("❌ 图片信息显示初始化失败:", error);
         }
@@ -592,9 +524,5 @@ export function usePhotoSwipe() {
     initPhotoSwipe,
     openPhotoSwipe,
     destroyPhotoSwipe,
-
-    // 工具方法
-    convertImagesToPhotoSwipeFormat,
-    getImageDataForPhotoSwipe,
   };
 }

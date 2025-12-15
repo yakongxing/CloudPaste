@@ -217,7 +217,7 @@ export default {
       selectedInfo: "Selected: {count} items ({folders} folders, {files} files)",
       targetLocation: "Target Location:",
       loading: "Loading...",
-      rootDirectory: "Root Directory",
+      rootDirectory: "Root",
       cancel: "Cancel",
       confirmCopy: "Confirm Copy",
       copying: "Copying...",
@@ -417,7 +417,7 @@ export default {
   },
   breadcrumb: {
     navigation: "Breadcrumb Navigation",
-    root: "Root Directory",
+    root: "Root",
     exitSelection: "Exit Selection", // Only keep this one, used in FloatingActionBar
   },
 };

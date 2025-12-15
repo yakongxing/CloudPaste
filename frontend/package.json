@@ -43,6 +43,7 @@
     "file-saver": "^2.0.5",
     "hls.js": "^1.6.7",
     "libarchive.js": "^2.0.2",
+    "libheif-js": "^1.19.8",
     "mime-db": "^1.54.0",
     "mpegts.js": "^1.8.0",
     "nprogress": "^0.2.0",

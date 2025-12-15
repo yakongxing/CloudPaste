@@ -1630,7 +1630,10 @@ StorageFactory.registerDriver(StorageFactory.SUPPORTED_TYPES.GITHUB_API, {
         type: "string",
         required: false,
         labelKey: "admin.storage.fields.default_folder",
-        ui: { placeholderKey: "admin.storage.placeholder.default_folder" },
+        ui: {
+          placeholderKey: "admin.storage.placeholder.default_folder",
+          emptyTextKey: "admin.storage.display.default_folder.root",
+        },
       },
       {
         name: "api_base",
