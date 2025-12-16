@@ -64,6 +64,7 @@
             <div v-else>
               <div v-for="row in exifRows" :key="row.key" class="metadata__row">
                 <i-mdi-calendar v-if="row.key === 'dateTimeOriginal'" class="metadata__row-icon" aria-hidden="true" />
+                <i-mdi-map-marker-outline v-else-if="row.key === 'location'" class="metadata__row-icon" aria-hidden="true" />
                 <i-mdi-camera v-else-if="row.key === 'camera'" class="metadata__row-icon" aria-hidden="true" />
                 <i-mdi-focus-auto v-else-if="row.key === 'lensModel'" class="metadata__row-icon" aria-hidden="true" />
                 <i-mdi-ruler v-else-if="row.key === 'focalLength'" class="metadata__row-icon" aria-hidden="true" />
@@ -74,6 +75,39 @@
                 <div class="metadata__row-body">
                   <div class="meta-value" :title="row.label">{{ row.value }}</div>
                 </div>
+              </div>
+            </div>
+
+            <!-- 地图嵌入 -->
+            <div v-if="gpsCoords && !mapLoadError" class="metadata__map-container">
+              <MapEmbed
+                class="metadata__map-iframe"
+                :lat="gpsCoords.lat"
+                :lng="gpsCoords.lng"
+                :interactive="true"
+                :show-zoom-controls="true"
+                @load="handleMapLoad"
+                @error="handleMapError"
+              />
+              <div class="metadata__map-actions">
+                <a :href="googleMapsUrl" target="_blank" rel="noopener noreferrer" class="metadata__map-link" title="在 Google Maps 中打开">
+                  <i-mdi-google-maps class="metadata__map-link-icon" aria-hidden="true" />
+                </a>
+                <a :href="amapUrl" target="_blank" rel="noopener noreferrer" class="metadata__map-link" title="在高德地图中打开">
+                  <i-mdi-map-marker class="metadata__map-link-icon" aria-hidden="true" />
+                </a>
+              </div>
+            </div>
+            <!-- 地图加载失败时的兜底 -->
+            <div v-else-if="gpsCoords && mapLoadError" class="metadata__map-fallback">
+              <div class="metadata__map-fallback-text">地图加载失败</div>
+              <div class="metadata__map-actions">
+                <a :href="googleMapsUrl" target="_blank" rel="noopener noreferrer" class="metadata__map-link" title="在 Google Maps 中打开">
+                  <i-mdi-google-maps class="metadata__map-link-icon" aria-hidden="true" />
+                </a>
+                <a :href="amapUrl" target="_blank" rel="noopener noreferrer" class="metadata__map-link" title="在高德地图中打开">
+                  <i-mdi-map-marker class="metadata__map-link-icon" aria-hidden="true" />
+                </a>
               </div>
             </div>
           </template>
@@ -87,9 +121,10 @@
 import { computed, ref, watch, onBeforeUnmount } from "vue";
 import { formatFileSize } from "@/utils/fileUtils";
 import { formatDateTime } from "@/utils/timeUtils";
-import { buildExifRows, isImageLikeForExif, loadExifTagsFromArrayBufferAsync } from "@/utils/exifReaderUtils";
+import { buildExifRows, isImageLikeForExif, loadExifTagsFromArrayBufferAsync, resolveGpsCoordinates } from "@/utils/exifReaderUtils";
 import { useFsService } from "@/modules/fs";
 import { getFileName, getMimeTypeDescription } from "@/utils/fileTypes";
+import MapEmbed from "@/components/common/MapEmbed.vue";
 
 const fsService = useFsService();
 
@@ -157,6 +192,44 @@ const exifError = ref(false);
 const exifRows = ref([]);
 const exifTagCount = ref(0);
 
+// 地图嵌入相关
+const gpsCoords = ref(null); // { lat, lng }
+const mapLoadError = ref(false);
+
+const clampNumber = (n, min, max) => {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return 0;
+  return Math.min(max, Math.max(min, num));
+};
+
+const googleMapsUrl = computed(() => {
+  if (!gpsCoords.value) return "";
+  const lat = clampNumber(gpsCoords.value.lat, -90, 90);
+  const lng = clampNumber(gpsCoords.value.lng, -180, 180);
+  const url = new URL("https://www.google.com/maps");
+  url.searchParams.set("q", `${lat},${lng}`);
+  return url.toString();
+});
+
+const amapUrl = computed(() => {
+  if (!gpsCoords.value) return "";
+  const lat = clampNumber(gpsCoords.value.lat, -90, 90);
+  const lng = clampNumber(gpsCoords.value.lng, -180, 180);
+  // 高德地图 URI API（注意：WGS-84 坐标可能有偏移，但作为跳转链接可接受）
+  const url = new URL("https://uri.amap.com/marker");
+  url.searchParams.set("position", `${lng},${lat}`);
+  url.searchParams.set("name", "照片位置");
+  return url.toString();
+});
+
+const handleMapError = () => {
+  mapLoadError.value = true;
+};
+
+const handleMapLoad = () => {
+  mapLoadError.value = false;
+};
+
 let exifAbortController = null;
 
 const abortExif = () => {
@@ -194,6 +267,8 @@ const parseExif = async () => {
   exifError.value = false;
   exifRows.value = [];
   exifTagCount.value = 0;
+  gpsCoords.value = null;
+  mapLoadError.value = false;
 
   const item = props.item;
   if (!item || !showExifSection.value) return;
@@ -211,7 +286,7 @@ const parseExif = async () => {
     }
 
     const tryLoadFromUrl = async (url) => {
-      if (!url) return { rows: [], tagCount: 0 };
+      if (!url) return { rows: [], tagCount: 0, tags: null };
       const res = await fetch(url, { signal: controller.signal });
       if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
       const ct = String(res.headers.get("content-type") || "").toLowerCase();
@@ -220,16 +295,24 @@ const parseExif = async () => {
       const tags = await loadExifTagsFromArrayBufferAsync(buf);
       const tagCount = Object.keys(tags || {}).length;
       const rows = buildExifRows(tags);
-      return { rows, tagCount };
+      return { rows, tagCount, tags };
     };
 
     // 先尝试 candidateUrl
     const first = await tryLoadFromUrl(candidateUrl);
     exifTagCount.value = first.tagCount;
     exifRows.value = first.rows;
+    // 提取 GPS 坐标用于地图嵌入
+    if (first.tags) {
+      gpsCoords.value = resolveGpsCoordinates(first.tags);
+    }
 
     // 若没有匹配到展示字段，回退使用 getFileLink 获取原文件字节
-    if (exifRows.value.length === 0) {
+    // 注意：location 行是 always=true，占位会让 exifRows.length > 0，从而导致永远不回退获取原文件 GPS
+    const shouldTryRaw =
+      exifRows.value.length === 0 || (exifTagCount.value > 0 && !gpsCoords.value);
+
+    if (shouldTryRaw) {
       let rawUrl = "";
       try {
         rawUrl = await fsService.getFileLink(item.path, null, false);
@@ -241,6 +324,10 @@ const parseExif = async () => {
         const second = await tryLoadFromUrl(rawUrl);
         exifTagCount.value = second.tagCount;
         exifRows.value = second.rows;
+        // 更新 GPS 坐标
+        if (second.tags) {
+          gpsCoords.value = resolveGpsCoordinates(second.tags);
+        }
       }
     }
   } catch (e) {

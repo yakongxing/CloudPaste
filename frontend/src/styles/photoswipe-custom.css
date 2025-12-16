@@ -544,3 +544,78 @@
   opacity: 0.7;
   cursor: default;
 }
+
+/* =========================
+ * Map Embed（地图嵌入）
+ * ========================= */
+
+.metadata__map-container {
+  margin-top: 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #ffffff12;
+  background: #1a1b1d;
+}
+
+.metadata__map-iframe {
+  display: block;
+  width: 100%;
+  height: 160px;
+  border: 0;
+  background: #1a1b1d;
+}
+
+.metadata__map-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid #ffffff12;
+  background: #1a1b1d;
+}
+
+.metadata__map-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: #ffffffcc;
+  background: transparent;
+  border: 1px solid #ffffff18;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.metadata__map-link:hover {
+  background: #ffffff10;
+  border-color: #ffffff28;
+  color: #fff;
+}
+
+.metadata__map-link-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.metadata__map-fallback {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #ffffff12;
+  background: #1a1b1d;
+  text-align: center;
+}
+
+.metadata__map-fallback-text {
+  font-size: 13px;
+  color: #ffffff80;
+  margin-bottom: 10px;
+}
+
+.metadata__map-fallback .metadata__map-actions {
+  justify-content: center;
+  border-top: 0;
+  padding-top: 0;
+}
