@@ -2,6 +2,9 @@ import { defineConfig, loadEnv } from "vite";
 import vue from "@vitejs/plugin-vue";
 import { VitePWA } from "vite-plugin-pwa";
 import { fileURLToPath, URL } from "node:url";
+import Icons from "unplugin-icons/vite";
+import Components from "unplugin-vue-components/vite";
+import IconsResolver from "unplugin-icons/resolver";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
@@ -32,6 +35,18 @@ export default defineConfig(({ command, mode }) => {
     },
     plugins: [
       vue(),
+      Components({
+        dts: false,
+        resolvers: [
+          IconsResolver({
+            prefix: "i",
+            enabledCollections: ["mdi"],
+          }),
+        ],
+      }),
+      Icons({
+        compiler: "vue3",
+      }),
       VitePWA({
         registerType: "autoUpdate",
         injectRegister: "auto", //自动注入更新检测代码

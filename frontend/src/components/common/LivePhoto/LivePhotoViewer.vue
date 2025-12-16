@@ -10,90 +10,89 @@
     }"
     :style="containerStyle"
   >
-    <!-- 媒体容器 -->
-    <div class="live-photo-viewer__media">
-      <!-- 视频层 -->
-      <video
-        ref="videoRef"
-        class="live-photo-viewer__video"
-        :src="lazyLoad ? undefined : videoSrc"
-        :data-src="lazyLoad ? videoSrc : undefined"
-        playsinline
-        preload="metadata"
-        :muted="muted"
-        :loop="loop"
-        @loadedmetadata="handleVideoLoadedMetadata"
-      />
-
-      <!-- 图片层 -->
-      <img
-        ref="imageRef"
-        class="live-photo-viewer__image"
-        :src="photoSrc"
-        :alt="alt"
-        loading="lazy"
-        @load="handleImageLoad"
-        @error="handleImageError"
-      />
-    </div>
-
-    <!-- 进度条 -->
-    <div v-if="showProgress && state.isLoading" class="live-photo-viewer__progress">
-      <div class="live-photo-viewer__progress-bar" :style="{ width: `${state.progress}%` }" />
-    </div>
-
-    <!-- 徽章图标 -->
-    <div
-      v-if="showBadge"
-      class="live-photo-viewer__badge"
-      :class="{ 'live-photo-viewer__badge--static': staticBadge }"
-      @mouseenter="!isMobileDevice && handleMouseEnter()"
-      @mouseleave="!isMobileDevice && handleMouseLeave()"
-    >
-      <!-- 错误图标 -->
-      <svg v-if="state.hasError" class="live-photo-viewer__badge-icon live-photo-viewer__badge-icon--error" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-      </svg>
-      <!-- Live Photo 图标 -->
-      <svg v-else class="live-photo-viewer__badge-icon" viewBox="0 0 24 24" fill="currentColor">
-        <circle cx="12" cy="12" r="3" />
-        <path
-          d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"
-          opacity="0.3"
+    <!-- 内容框：按“contain”规则计算，保证长图不裁切且视频/图片几何区域一致 -->
+    <div class="live-photo-viewer__content" :style="contentStyle">
+      <!-- 媒体容器 -->
+      <div class="live-photo-viewer__media">
+        <!-- 视频层 -->
+        <video
+          ref="videoRef"
+          class="live-photo-viewer__video"
+          :src="lazyLoad ? undefined : videoSrc"
+          :data-src="lazyLoad ? videoSrc : undefined"
+          playsinline
+          preload="metadata"
+          :muted="muted"
+          :loop="loop"
+          @loadedmetadata="handleVideoLoadedMetadata"
         />
-      </svg>
-      <span v-if="showBadgeText" class="live-photo-viewer__badge-text">{{ badgeText || t("livePhoto.badge") }}</span>
-    </div>
 
-    <!-- 触摸覆盖层（移动端） -->
-    <div
-      v-if="isMobileDevice"
-      class="live-photo-viewer__overlay"
-      @touchstart.prevent="handleTouchStart"
-      @touchend="handleTouchEnd"
-      @touchcancel="handleTouchEnd"
-    />
-
-    <!-- 警告提示 -->
-    <Transition name="live-photo-warning">
-      <div v-if="state.hasError && state.errorMessage" class="live-photo-viewer__warning">
-        {{ warningMessage }}
+        <!-- 图片层 -->
+        <img
+          ref="imageRef"
+          class="live-photo-viewer__image"
+          :src="photoSrc"
+          :alt="alt"
+          loading="lazy"
+          @load="handleImageLoad"
+          @error="handleImageError"
+        />
       </div>
-    </Transition>
 
-    <!-- 加载指示器 -->
-    <div v-if="state.isLoading && showLoadingIndicator" class="live-photo-viewer__loading">
-      <div class="live-photo-viewer__loading-spinner" />
+      <!-- 进度条 -->
+      <div v-if="showProgress && state.isLoading" class="live-photo-viewer__progress">
+        <div class="live-photo-viewer__progress-bar" :style="{ width: `${state.progress}%` }" />
+      </div>
+
+      <!-- 徽章图标 -->
+      <div
+        v-if="showBadge"
+        class="live-photo-viewer__badge"
+        :class="{ 'live-photo-viewer__badge--static': staticBadge }"
+        @mouseenter="!isMobileDevice && handleMouseEnter()"
+        @mouseleave="!isMobileDevice && handleMouseLeave()"
+      >
+        <!-- 错误图标 -->
+        <svg v-if="state.hasError" class="live-photo-viewer__badge-icon live-photo-viewer__badge-icon--error" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+        </svg>
+        <!-- Live Photo 图标 -->
+        <span v-else v-html="livePhotoBadgeIconSvg" />
+        <span v-if="showBadgeText" class="live-photo-viewer__badge-text">{{ badgeText || t("livePhoto.badge") }}</span>
+      </div>
+
+      <!-- 触摸覆盖层（移动端） -->
+      <div
+        v-if="isMobileDevice"
+        class="live-photo-viewer__overlay"
+        @touchstart.prevent="handleTouchStart"
+        @touchend="handleTouchEnd"
+        @touchcancel="handleTouchEnd"
+      />
+
+      <!-- 警告提示 -->
+      <Transition name="live-photo-warning">
+        <div v-if="state.hasError && state.errorMessage" class="live-photo-viewer__warning">
+          {{ warningMessage }}
+        </div>
+      </Transition>
+
+      <!-- 加载指示器 -->
+      <div v-if="state.isLoading && showLoadingIndicator" class="live-photo-viewer__loading">
+        <div class="live-photo-viewer__loading-spinner" />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, watch, onMounted, toRef } from "vue";
+import { computed, watch, onMounted, onBeforeUnmount, ref, toRef } from "vue";
 import { useI18n } from "vue-i18n";
 import { useLivePhoto, PlaybackStyle, LivePhotoErrorType } from "./useLivePhoto.js";
+import { LIVE_PHOTO_BADGE_ICON_SVG } from "./livePhotoBadgeIconSvg.js";
 
 const { t } = useI18n();
+const livePhotoBadgeIconSvg = LIVE_PHOTO_BADGE_ICON_SVG;
 
 // Props 定义
 const props = defineProps({
@@ -263,6 +262,76 @@ const warningMessage = computed(() => {
   return state.errorMessage;
 });
 
+const parseAspectRatio = (value) => {
+  if (value == null) return null;
+  if (typeof value === "number") return value > 0 ? value : null;
+
+  const text = value.toString().trim();
+  if (!text) return null;
+
+  if (text.includes("/")) {
+    const [aRaw, bRaw] = text.split("/");
+    const a = Number(aRaw?.trim());
+    const b = Number(bRaw?.trim());
+    if (Number.isFinite(a) && Number.isFinite(b) && a > 0 && b > 0) return a / b;
+    return null;
+  }
+
+  const num = Number(text);
+  if (!Number.isFinite(num) || num <= 0) return null;
+  return num;
+};
+
+const measuredAspectRatio = ref(null);
+const containerSize = ref({ width: 0, height: 0 });
+let resizeObserver = null;
+
+const measureContainer = () => {
+  const el = containerRef.value;
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  containerSize.value = { width: rect.width, height: rect.height };
+};
+
+const baseAspectRatio = computed(() => {
+  return parseAspectRatio(props.aspectRatio) ?? measuredAspectRatio.value ?? null;
+});
+
+const contentStyle = computed(() => {
+  const ratio = baseAspectRatio.value;
+  const { width, height } = containerSize.value;
+
+  if (!ratio || !width || !height) {
+    return { top: "0px", left: "0px", width: "100%", height: "100%" };
+  }
+
+  const containerRatio = width / height;
+  let contentWidth = width;
+  let contentHeight = height;
+  let left = 0;
+  let top = 0;
+
+  // contain：保证内容完整可见，不裁切
+  if (containerRatio > ratio) {
+    contentHeight = height;
+    contentWidth = height * ratio;
+    left = (width - contentWidth) / 2;
+    top = 0;
+  } else {
+    contentWidth = width;
+    contentHeight = width / ratio;
+    left = 0;
+    top = (height - contentHeight) / 2;
+  }
+
+  return {
+    top: `${top}px`,
+    left: `${left}px`,
+    width: `${contentWidth}px`,
+    height: `${contentHeight}px`,
+  };
+});
+
 // 计算样式
 const containerStyle = computed(() => {
   const style = {};
@@ -312,10 +381,12 @@ const handleImageLoad = (e) => {
   if (!props.aspectRatio && imageRef.value) {
     const img = imageRef.value;
     const ratio = img.naturalWidth / img.naturalHeight;
+    measuredAspectRatio.value = ratio;
     if (containerRef.value && !props.width && !props.height) {
       containerRef.value.style.aspectRatio = ratio.toString();
     }
   }
+  requestAnimationFrame(() => measureContainer());
   emit("load", e);
 };
 
@@ -358,7 +429,16 @@ defineExpose({
 
 // 自动播放
 onMounted(() => {
-  // 兼容旧逻辑：真正触发由上面的 watch 负责
+  measureContainer();
+  if (typeof ResizeObserver !== "undefined" && containerRef.value) {
+    resizeObserver = new ResizeObserver(() => measureContainer());
+    resizeObserver.observe(containerRef.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
 });
 </script>
 

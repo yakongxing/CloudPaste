@@ -267,14 +267,7 @@
                 <!-- Live Photo 标志（仅展示，不触发播放；播放在灯箱/预览区处理）-->
                 <div v-if="isLivePhotoInGallery(item.image)" class="pointer-events-none" :class="{ 'live-photo-viewer--dark': darkMode }">
                   <div class="live-photo-viewer__badge live-photo-viewer__badge--static" :title="t('livePhoto.badge')">
-                    <svg class="live-photo-viewer__badge-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      <circle cx="12" cy="12" r="3" />
-                      <path
-                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"
-                        opacity="0.3"
-                      />
-                    </svg>
-                    <span class="live-photo-viewer__badge-text">{{ t("livePhoto.badge") }}</span>
+                    <span v-html="livePhotoBadgeIconSvg" />
                   </div>
                 </div>
 
@@ -377,15 +370,17 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useGalleryView } from "@/composables/ui-interaction/useGalleryView";
-import { usePhotoSwipe } from "@/composables/ui-interaction/usePhotoSwipe";
 import { useContextMenu } from "@/composables/useContextMenu";
 import { detectLivePhoto } from "@/utils/livePhotoUtils.js";
 import { getFileIcon } from "@/utils/fileTypeIcons";
 import { formatFileSize } from "@/utils/fileUtils";
 import MasonryWall from "@yeger/vue-masonry-wall";
 import "@/components/common/LivePhoto/LivePhotoViewer.css";
+import { LIVE_PHOTO_BADGE_ICON_SVG } from "@/components/common/LivePhoto/livePhotoBadgeIconSvg.js";
+import { useFsMediaLightbox } from "@/modules/fs/composables/useFsMediaLightbox";
 
 const { t } = useI18n();
+const livePhotoBadgeIconSvg = LIVE_PHOTO_BADGE_ICON_SVG;
 
 const props = defineProps({
   items: {
@@ -454,8 +449,7 @@ const {
   resetRenderWindow,
 } = useGalleryView({ items: computed(() => props.items) });
 
-// 使用PhotoSwipe图片预览组合式函数
-const { initPhotoSwipe, openPhotoSwipe, destroyPhotoSwipe } = usePhotoSwipe();
+const fsLightbox = useFsMediaLightbox();
 
 // ===== 操作菜单相关方法 =====
 
@@ -554,10 +548,22 @@ const getImageState = (image) => {
 
 // ===== Live Photo（图廊仅标识，不播放）=====
 
+const livePhotoInfoByPath = computed(() => {
+  const map = new Map();
+  for (const img of allImages.value) {
+    if (!img?.path) continue;
+    const result = detectLivePhoto(img, props.items);
+    map.set(img.path, {
+      isLive: !!result?.isLivePhoto,
+      videoPath: result?.videoFile?.path || "",
+    });
+  }
+  return map;
+});
+
 const isLivePhotoInGallery = (image) => {
-  if (!image) return false;
-  const result = detectLivePhoto(image, props.items);
-  return !!result?.isLivePhoto;
+  if (!image?.path) return false;
+  return !!livePhotoInfoByPath.value.get(image.path)?.isLive;
 };
 
 const handleImageLoad = (image, event) => {
@@ -605,6 +611,21 @@ const getPlaceholderStyle = () => {
 // 当前目录的图片索引
 const imagesByPath = computed(() => {
   return new Map(allImages.value.map((img) => [img.path, img]));
+});
+
+// 灯箱数据源
+const lightboxItems = computed(() => {
+  const infoMap = livePhotoInfoByPath.value;
+  return allImages.value.map((img) => {
+    const info = infoMap.get(img.path);
+    if (info?.isLive && info.videoPath) {
+      return {
+        ...img,
+        __cloudpasteLivePhotoVideoPath: info.videoPath,
+      };
+    }
+    return img;
+  });
 });
 
 // 上下文菜单处理 - 使用统一的 useContextMenu
@@ -730,17 +751,21 @@ const handleItemClick = async (item) => {
     return;
   }
 
-  const currentIndex = allImages.value.findIndex((img) => img.path === item.path);
+  const currentIndex = lightboxItems.value.findIndex((img) => img.path === item.path);
   if (currentIndex === -1) {
     emit("item-click", item);
     return;
   }
 
-  try {
-    await openPhotoSwipe(allImages.value, currentIndex, imageStates.value, loadImageUrl);
-  } catch (error) {
-    emit("item-click", item);
-  }
+  fsLightbox.open({
+    items: lightboxItems.value,
+    index: currentIndex,
+    darkMode: props.darkMode,
+    imageStates: imageStates.value,
+    loadImageUrl,
+    onDownload: (current) => emit("download", current),
+    onGetLink: (current) => emit("getLink", current),
+  });
 };
 
 const toggleItemSelect = (item) => {
@@ -815,7 +840,6 @@ onMounted(() => {
   nextTick(() => {
     updateSpacingCSSVariables();
     initImageLazyLoading();
-    initPhotoSwipe();
     initLoadMoreObserver();
   });
 
@@ -858,7 +882,6 @@ onBeforeUnmount(() => {
 
   clearImageStates();
   resetRenderWindow();
-  destroyPhotoSwipe();
 });
 </script>
 

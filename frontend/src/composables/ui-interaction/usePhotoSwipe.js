@@ -7,96 +7,181 @@ import { ref, nextTick } from "vue";
 import PhotoSwipeLightbox from "photoswipe/lightbox";
 import "photoswipe/style.css";
 import "@/styles/photoswipe-custom.css";
+import "@/components/common/LivePhoto/LivePhotoViewer.css";
+import { LIVE_PHOTO_BADGE_ICON_SVG } from "@/components/common/LivePhoto/livePhotoBadgeIconSvg.js";
 
 export function usePhotoSwipe() {
-  // PhotoSwipe实例
   const lightbox = ref(null);
   const isInitialized = ref(false);
 
-  // 当前打开会话（每次 openPhotoSwipe 会刷新）
   const session = {
-    images: /** @type {Array<any>} */ ([]),
+    items: /** @type {Array<any>} */ ([]),
     imageStates: /** @type {Map<string, any> | null} */ (null),
     loadImageUrl: /** @type {Function | null} */ (null),
     abortController: /** @type {AbortController | null} */ (null),
+    appendToEl: /** @type {HTMLElement | null} */ (null),
+    resolveVideoSrc: /** @type {((path: string) => Promise<string>) | null} */ (null),
+    handlers: /** @type {any} */ ({
+      onRequestClose: null,
+      onToggleSidebar: null,
+      onToggleMenu: null,
+      onToggleFullscreen: null,
+      onToggleSlideshow: null,
+      onIndexChange: null,
+      onClosed: null,
+      getSlideshowActive: null,
+      onMenuButtonInit: null,
+    }),
+    darkMode: false,
+    muted: true,
+    transforms: /** @type {Map<string, { rotate: number; flipY: boolean }>} */ (new Map()),
   };
 
-  /**
-   * 初始化PhotoSwipe
-   *
-   */
+  const mobileBreakpoint = 1024;
+
+  const setAppendToEl = (el) => {
+    session.appendToEl = el || null;
+  };
+
+  const setExternalHandlers = (handlers = {}) => {
+    session.handlers = { ...(session.handlers || {}), ...(handlers || {}) };
+  };
+
+  const setVideoResolver = (resolver) => {
+    session.resolveVideoSrc = typeof resolver === "function" ? resolver : null;
+  };
+
+  const getPswp = () => {
+    return lightbox.value?.pswp || null;
+  };
+
+  const getViewportSize = () => {
+    const el = session.appendToEl;
+    if (el && typeof el.clientWidth === "number" && typeof el.clientHeight === "number") {
+      return { x: el.clientWidth, y: el.clientHeight };
+    }
+    return { x: document.documentElement.clientWidth, y: window.innerHeight };
+  };
+
+  const getPadding = (viewport, data) => {
+    let top = 0;
+    let bottom = 0;
+    let left = 0;
+    let right = 0;
+
+    if (!viewport || !data?.width || !data?.height) return { top, bottom, left, right };
+
+    // 小屏不加 padding
+    if (viewport.x <= mobileBreakpoint) return { top, bottom, left, right };
+
+    // 仅对图片内容加 padding（HTML slide 不处理）
+    if (!data?.src) return { top, bottom, left, right };
+
+    if (data.width % viewport.x !== 0 && viewport.x > viewport.y) {
+      left = 48;
+      right = 48;
+    }
+
+    if (data.height % viewport.y === 0) {
+      top = 48;
+      bottom = 48;
+      left = 48;
+      right = 48;
+    } else if (data.height > data.width) {
+      top = 48;
+      bottom = 48;
+    } else {
+      top = 72;
+      bottom = 64;
+    }
+
+    return { top, bottom, left, right };
+  };
+
   const initPhotoSwipe = () => {
     if (isInitialized.value) return;
+    if (!session.appendToEl) return;
 
     try {
       lightbox.value = new PhotoSwipeLightbox({
-        // 动态模式不需要gallery和children选择器
-        // 我们使用loadAndOpen方法直接传递数据
-
-        // 动态导入PhotoSwipe核心模块
+        // 将 PhotoSwipe 渲染限制在外部壳组件的容器内（用于 sidebar/menu 等外围 UI）
+        appendToEl: session.appendToEl,
         pswpModule: () => import("photoswipe"),
 
-        // 基础配置
-        showHideAnimationType: "zoom",
+        // 缩放与平移交互
+        zoom: true,
+        mouseMovePan: true,
+        allowPanToNext: false,
+        pinchToClose: false,
 
-        // 移动端优化
-        pinchToClose: true,
-        closeOnVerticalDrag: true,
+        // 关闭动画，外部壳负责遮罩与过渡
+        showHideAnimationType: "none",
+        showAnimationDuration: 0,
+        hideAnimationDuration: 0,
 
-        // 界面配置
-        padding: { top: 20, bottom: 40, left: 100, right: 100 },
+        // 交互：键盘/关闭行为交给外部壳统一处理
+        arrowKeys: false,
+        escKey: false,
+        close: false,
+        counter: false,
+        closeOnVerticalDrag: false,
+        closeOnScroll: false,
 
-        // 缩放配置 - 允许任意缩放大小
-        initialZoomLevel: (zoomLevelObject) => {
-          // 打开时显示适合视口的65%大小，这样用户可以缩小到更小或放大到更大
-          return zoomLevelObject.fit * 0.65;
-        },
-        secondaryZoomLevel: "fit", // 点击缩放按钮时回到适合视口大小
-        maxZoomLevel: (zoomLevelObject) => {
-          // 最大可以放大到8倍fit大小
-          return zoomLevelObject.fit * 8;
-        },
-
-        // 键盘导航
-        arrowKeys: true,
-
-        // 鼠标滚轮缩放
+        // 缩放
         wheelToZoom: true,
+        initialZoomLevel: "fit",
+        // 并限制在 maxZoomLevel（当前为 8）以内。
+        secondaryZoomLevel: (zoomLevels) => {
+          const pan = zoomLevels?.panAreaSize;
+          const el = zoomLevels?.elementSize;
+          if (!pan || !el || !el.x || !el.y) return zoomLevels?.fill || 1;
 
-        // 背景点击关闭
-        bgOpacity: 0.8,
+          // 计算“填充视口”的倍率（不再 clamp 到 1）
+          const fillScale = Math.max(pan.x / el.x, pan.y / el.y);
 
-        // 动画配置
-        showAnimationDuration: 333,
-        hideAnimationDuration: 333,
+          // 保持至少为 fit，且避免 NaN/Infinity
+          const next = Number.isFinite(fillScale) ? Math.max(zoomLevels.fit || 1, fillScale) : (zoomLevels?.fill || 1);
 
-        // 预加载邻近图片（官方推荐用于大图廊：只预加载相邻 slide，而不是全量预取）
-        preload: [1, 2],
+          return Math.min(8, next);
+        },
+        maxZoomLevel: 8,
+
+        // 视口与留白计算（影响“看起来是否居中/是否过大”）
+        getViewportSizeFn: () => getViewportSize(),
+        paddingFn: (viewportSize, itemData) => getPadding(viewportSize, itemData),
+
+        // 背景：由外部壳提供（避免双层黑底）
+        bgOpacity: 1,
+
+        // 为 pswp 根节点添加主类名，便于统一样式覆盖
+        mainClass: "p-lightbox__pswp",
+
+        // 背景点击由外部壳统一关闭
+        bgClickAction: () => session.handlers?.onRequestClose?.(),
+
+        // 预加载：只加载相邻 slide
+        preload: [1, 1],
       });
 
-      // 监听PhotoSwipe事件
-      setupPhotoSwipeEvents();
-
-      // ✅ dataSource + itemData filter：避免打开时全量构建 slide 数据（按需生成）
       setupPhotoSwipeFilters();
-
-      // 初始化
+      setupPhotoSwipeEvents();
       lightbox.value.init();
       isInitialized.value = true;
     } catch (error) {
-      console.error("❌ PhotoSwipe初始化失败:", error);
+      console.error("[PhotoSwipe] 初始化失败:", error);
     }
   };
 
-  /**
-   * 注册过滤器：按 index 生成 slide itemData
-   */
   const setupPhotoSwipeFilters = () => {
     if (!lightbox.value) return;
 
-    lightbox.value.addFilter("itemData", (itemData, index) => {
-      const image = session.images[index] || itemData;
-      const state = session.imageStates ? session.imageStates.get(image?.path) : null;
+    lightbox.value.addFilter("numItems", () => {
+      return Array.isArray(session.items) ? session.items.length : 0;
+    });
+
+    lightbox.value.addFilter("itemData", (itemData, i) => {
+      const item = session.items[i] || itemData;
+      const state = session.imageStates ? session.imageStates.get(item?.path) : null;
 
       const width = state?.naturalWidth || 1200;
       const height = state?.naturalHeight || 800;
@@ -106,423 +191,862 @@ export function usePhotoSwipe() {
         src,
         width,
         height,
-        alt: image?.name || "",
-        title: image?.name || "",
-        __cloudpasteImage: image,
+        alt: item?.name || "",
+        title: item?.name || "",
+        __cloudpasteItem: item,
       };
     });
   };
 
-  /**
-   * 设置PhotoSwipe事件监听器
-   */
   const setupPhotoSwipeEvents = () => {
     if (!lightbox.value) return;
 
-    // 关闭：控制会话 Abort（避免关闭后继续请求）
     lightbox.value.on("close", () => {
       session.abortController?.abort();
       session.abortController = null;
-      session.images = [];
+      session.items = [];
       session.imageStates = null;
       session.loadImageUrl = null;
+      session.darkMode = false;
+      session.transforms.clear();
+      session.handlers?.onClosed?.();
     });
 
-    // 按需加载：拦截 contentLoad，自行异步填充 src（避免 open 时全量 await）
+    // slide 销毁时清理自定义资源（视频事件/定时器等）
+    lightbox.value.on("contentDestroy", (e) => {
+      const content = e?.content;
+      const cleanup = content?.data?.__cloudpasteCleanup;
+      if (typeof cleanup === "function") {
+        try {
+          cleanup();
+        } catch {
+          // 忽略
+        }
+      }
+    });
+
+    lightbox.value.on("change", () => {
+      const pswp = lightbox.value?.pswp;
+      if (!pswp) return;
+      session.handlers?.onIndexChange?.(pswp.currIndex);
+      void prefetchAround(pswp.currIndex);
+      applyTransformToSlide(pswp.currSlide);
+    });
+
+    lightbox.value.on("uiRegister", () => {
+      registerCoreUI();
+      registerCaptionUI();
+    });
+
     lightbox.value.on("contentLoad", (e) => {
       const content = e?.content;
-      const image = content?.data?.__cloudpasteImage;
-      if (!content || !image) return;
+      const item = content?.data?.__cloudpasteItem;
+      if (!content || !item) return;
 
+      if (item?.__cloudpasteLivePhotoVideoPath) {
+        void renderLivePhotoContent(e, item);
+        return;
+      }
+    });
+
+    // 图片仍使用 PhotoSwipe 原生 image content（保证 fit/居中/缩放逻辑一致），
+    // 仅在这里异步注入 src（按需加载 + Abort）。
+    lightbox.value.on("contentLoadImage", (e) => {
+      const content = e?.content;
+      const item = content?.data?.__cloudpasteItem;
+      if (!content || !item) return;
+      if (item?.__cloudpasteLivePhotoVideoPath) return;
+
+      // 使用原生 Content，但自行控制 src 加载与 onLoaded/onError
       e.preventDefault();
 
-      const img = document.createElement("img");
-      img.className = "pswp__img";
-      img.decoding = "async";
-      img.alt = image?.name || "";
-
-      content.element = img;
-      content.state = "loading";
+      const img = /** @type {HTMLImageElement | undefined} */ (content.element);
+      if (!img) return;
 
       const signal = session.abortController?.signal;
 
       void (async () => {
         try {
-          const src = await ensureImageSrc(image, { signal });
+          const src = await ensureImageSrc(item, { signal });
           if (signal?.aborted) return;
 
+          img.decoding = "async";
+          img.alt = item?.name || "";
+
           img.onload = () => {
-            // 回写尺寸，改善后续 zoom/布局
-            if (session.imageStates && image?.path) {
-              const prev = session.imageStates.get(image.path) || null;
-              session.imageStates.set(image.path, {
-                ...(prev || { status: "loaded", url: src }),
-                status: "loaded",
-                url: src,
-                naturalWidth: img.naturalWidth,
-                naturalHeight: img.naturalHeight,
-                aspectRatio: img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : undefined,
-              });
+            try {
+              const w = img.naturalWidth || 0;
+              const h = img.naturalHeight || 0;
+              if (w && h) {
+                content.data.width = w;
+                content.data.height = h;
+                content.width = w;
+                content.height = h;
+              }
+
+              if (session.imageStates && item?.path) {
+                const prev = session.imageStates.get(item.path) || null;
+                session.imageStates.set(item.path, {
+                  ...(prev || { status: "loaded", url: src }),
+                  status: "loaded",
+                  url: src,
+                  naturalWidth: w || (prev?.naturalWidth || 0),
+                  naturalHeight: h || (prev?.naturalHeight || 0),
+                  aspectRatio: w && h ? w / h : prev?.aspectRatio,
+                });
+              }
+
+              // PhotoSwipe 的缩放/zoomLevels 计算依赖 slide.width/height。
+              const slide = content.slide;
+              if (slide && w && h) {
+                slide.width = w;
+                slide.height = h;
+                if (slide.data) {
+                  slide.data.width = w;
+                  slide.data.height = h;
+                  slide.data.src = src;
+                }
+                content.data.src = src;
+                slide.resize?.();
+              } else {
+                // 保底：只更新 displayed size（不重置 zoom），避免在极端情况下卡死
+                content.slide?.updateContentSize?.(true);
+              }
+            } catch {
+              // ignore
             }
+
             content.onLoaded();
           };
 
-          img.onerror = () => {
-            content.onError();
-          };
-
+          img.onerror = () => content.onError();
           img.src = src;
-        } catch (error) {
+        } catch {
           content.onError();
         }
       })();
     });
-
-    // 索引变化：预取相邻项（配合 preload，让用户滑动更顺）
-    lightbox.value.on("change", () => {
-      const pswp = lightbox.value.pswp;
-      if (!pswp) return;
-      void prefetchAround(pswp.currIndex);
-    });
-
-    // 注册自定义UI元素
-    lightbox.value.on("uiRegister", () => {
-      registerCustomUIElements();
-    });
   };
 
-  /**
-   * 注册自定义UI元素
-   * 使用PhotoSwipe官方API，保持原生风格
-   */
-  const registerCustomUIElements = () => {
-    const pswp = lightbox.value.pswp;
-    if (!pswp) {
-      console.warn("⚠️ PhotoSwipe实例不可用，无法注册自定义UI元素");
+  const getTransformKey = (slide) => {
+    const item = slide?.data?.__cloudpasteItem;
+    return item?.path || slide?.data?.src || String(slide?.index ?? "");
+  };
+
+  const getTransformState = (key) => {
+    return session.transforms.get(key) || { rotate: 0, flipY: false };
+  };
+
+  const setTransformState = (key, next) => {
+    session.transforms.set(key, next);
+  };
+
+  const applyTransformToSlide = (slide) => {
+    if (!slide) return;
+    const item = slide?.data?.__cloudpasteItem;
+
+    const key = getTransformKey(slide);
+    const state = getTransformState(key);
+
+    const rotate = ((state.rotate % 360) + 360) % 360;
+    const flip = !!state.flipY;
+    const extraTransform = `${flip ? "scaleY(-1) " : ""}rotate(${rotate}deg)`.trim() || "none";
+
+    const el = slide?.content?.element;
+
+    if (item?.__cloudpasteLivePhotoVideoPath) {
+      if (!(el instanceof HTMLElement)) return;
+      el.style.setProperty("--cloudpaste-media-transform", extraTransform);
       return;
     }
 
-    try {
-      // 注册旋转按钮
-      registerRotateButton(pswp);
-
-      // 注册翻转按钮
-      registerFlipButton(pswp);
-
-      // 注册图片信息显示
-      registerImageInfo(pswp);
-    } catch (error) {
-      console.error("❌ PhotoSwipe自定义UI元素注册失败:", error);
-    }
+    // 普通图片：直接对 pswp__img 设置 transform，不影响 zoom-wrap 的缩放/平移
+    if (!(el instanceof HTMLImageElement)) return;
+    el.style.transformOrigin = "center center";
+    el.style.transform = extraTransform === "none" ? "" : extraTransform;
+    el.style.transition = "transform 120ms ease-out";
   };
 
-  /**
-   * 打开PhotoSwipe预览
-   * @param {Array} images - 图片数组
-   * @param {number} startIndex - 起始索引
-   * @param {Map} imageStates - 图片状态管理Map（可选）
-   * @param {Function} loadImageUrl - 图片URL加载函数（可选）
-   */
-  const openPhotoSwipe = async (images, startIndex = 0, imageStates = null, loadImageUrl = null) => {
-    if (!images || images.length === 0) {
-      console.warn("⚠️ PhotoSwipe: 没有图片可预览");
-      return;
+  const rotateCurrent = () => {
+    const pswp = getPswp();
+    const slide = pswp?.currSlide;
+    if (!slide) return;
+    const key = getTransformKey(slide);
+    const prev = getTransformState(key);
+    setTransformState(key, { ...prev, rotate: (prev.rotate + 90) % 360 });
+    applyTransformToSlide(slide);
+  };
+
+  const toggleFlipVerticalCurrent = () => {
+    const pswp = getPswp();
+    const slide = pswp?.currSlide;
+    if (!slide) return;
+    const key = getTransformKey(slide);
+    const prev = getTransformState(key);
+    setTransformState(key, { ...prev, flipY: !prev.flipY });
+    applyTransformToSlide(slide);
+  };
+
+  const registerCoreUI = () => {
+    const pswp = lightbox.value?.pswp;
+    if (!pswp) return;
+
+    // 关闭
+    pswp.ui.registerElement({
+      name: "close-button",
+      className: "pswp__button pswp__button--close-button",
+      title: "关闭",
+      ariaLabel: "关闭",
+      order: 1,
+      isButton: true,
+      html: {
+        isCustomSVG: true,
+        inner: '<path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" id="pswp__icn-close-button"/>',
+        outlineID: "pswp__icn-close-button",
+        size: 24,
+      },
+      onClick: () => session.handlers?.onRequestClose?.(),
+    });
+
+    // 信息侧栏
+    if (window.innerWidth > mobileBreakpoint) {
+      pswp.ui.registerElement({
+        name: "sidebar-button",
+        className: "pswp__button pswp__button--info-button pswp__button--mdi",
+        title: "信息",
+        ariaLabel: "信息",
+        order: 9,
+        isButton: true,
+        html: {
+          isCustomSVG: true,
+          inner:
+            '<path d="M11 7V9H13V7H11M14 17V15H13V11H10V13H11V15H10V17H14M22 12C22 17.5 17.5 22 12 22C6.5 22 2 17.5 2 12C2 6.5 6.5 2 12 2C17.5 2 22 6.5 22 12M20 12C20 7.58 16.42 4 12 4C7.58 4 4 7.58 4 12C4 16.42 7.58 20 12 20C16.42 20 20 16.42 20 12Z" id="pswp__icn-info"/>',
+          outlineID: "pswp__icn-info",
+          size: 24,
+        },
+        onClick: () => session.handlers?.onToggleSidebar?.(),
+      });
     }
 
-    // 确保PhotoSwipe已初始化
-    if (!isInitialized.value) {
-      initPhotoSwipe();
-      // 等待初始化完成
-      await nextTick();
-    }
-
-    // 更新会话上下文（供 filter/contentLoad/change 使用）
-    session.images = images;
-    session.imageStates = imageStates;
-    session.loadImageUrl = loadImageUrl;
-    session.abortController?.abort();
-    session.abortController = new AbortController();
-
-    const validStartIndex = Math.max(0, Math.min(startIndex, images.length - 1));
-
-    // 先确保“当前图片”可立即展示（避免打开后长时间空白）
-    const image = images[validStartIndex];
-    if (image) {
-      try {
-        await ensureImageSrc(image, { signal: session.abortController.signal, priority: "high" });
-      } catch (error) {
-        // 即便失败也允许打开，交给 contentLoad error UI 处理
+    // 实况/视频声音
+    let soundButtonEl = null;
+    const updateSoundButton = () => {
+      const item = pswp?.currSlide?.data?.__cloudpasteItem;
+      const isLive = !!item?.__cloudpasteLivePhotoVideoPath;
+      if (soundButtonEl) {
+        soundButtonEl.style.display = isLive ? "" : "none";
+        soundButtonEl.classList.toggle("is-muted", !!session.muted);
+        soundButtonEl.setAttribute("aria-label", session.muted ? "取消静音" : "静音");
+        soundButtonEl.setAttribute("title", session.muted ? "取消静音" : "静音");
       }
-    }
+    };
 
-    // 打开（dataSource 直接传 images，由 itemData filter 转换）
-    lightbox.value.loadAndOpen(validStartIndex, images);
-
-    // 后台预取邻近项
-    void prefetchAround(validStartIndex);
-  };
-
-  /**
-   * 确保某张图片具备可渲染的 src（按需触发 loadImageUrl）
-   * @param {any} image
-   * @param {{ signal?: AbortSignal; priority?: "high" | "normal" }} [options]
-   * @returns {Promise<string>}
-   */
-  const ensureImageSrc = async (image, options = {}) => {
-    const signal = options.signal;
-    if (signal?.aborted) throw new Error("aborted");
-
-    const state = session.imageStates ? session.imageStates.get(image?.path) : null;
-    if (state?.status === "loaded" && state?.url) return state.url;
-
-    if (typeof session.loadImageUrl === "function") {
-      await session.loadImageUrl(image, { priority: options.priority || "high", signal });
-    }
-
-    const nextState = session.imageStates ? session.imageStates.get(image?.path) : null;
-    if (nextState?.status === "loaded" && nextState?.url) return nextState.url;
-    throw new Error("image src unavailable");
-  };
-
-  const prefetchAround = async (index) => {
-    const signal = session.abortController?.signal;
-    if (!Array.isArray(session.images) || session.images.length === 0) return;
-    if (signal?.aborted) return;
-
-    // 与 preload 配合：主观再补一层预取
-    const candidates = [index - 2, index - 1, index + 1, index + 2];
-    for (const i of candidates) {
-      if (i < 0 || i >= session.images.length) continue;
-      const image = session.images[i];
-      if (!image) continue;
-      void ensureImageSrc(image, { signal, priority: "normal" });
-    }
-  };
-
-  /**
-   * 销毁PhotoSwipe实例
-   */
-  const destroyPhotoSwipe = () => {
-    if (lightbox.value) {
-      lightbox.value.destroy();
-      lightbox.value = null;
-      isInitialized.value = false;
-    }
-  };
-
-  /**
-   * 注册旋转按钮
-   * 使用PhotoSwipe官方API，保持原生风格
-   */
-  const registerRotateButton = (pswp) => {
-    // 存储每张图片的旋转角度
-    const imageRotations = new Map();
+    const applyMutedToCurrentVideo = () => {
+      const el = pswp?.currSlide?.content?.element;
+      const video = el?.querySelector?.(".pswp__video");
+      if (!(video instanceof HTMLVideoElement)) return;
+      video.muted = !!session.muted;
+      if (session.muted) {
+        video.setAttribute("muted", "");
+      } else {
+        video.removeAttribute("muted");
+      }
+    };
 
     pswp.ui.registerElement({
-      name: "rotate-button",
-      title: "旋转",
-      ariaLabel: "旋转图片",
-      order: 7, // 在缩放按钮(order: 10)之前
+      name: "sound-toggle",
+      className: "pswp__button pswp__button--sound-toggle pswp__button--mdi",
+      title: "静音",
+      ariaLabel: "静音",
+      order: 10,
       isButton: true,
-      // ✅ 还原到最开始的简单旋转样式
+      html: {
+        isCustomSVG: true,
+        inner:
+          '<path d="M14,3.23V5.29C16.89,6.15 19,8.83 19,12C19,15.17 16.89,17.84 14,18.7V20.77C18,19.86 21,16.28 21,12C21,7.72 18,4.14 14,3.23M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.76 16.5,12M3,9V15H7L12,20V4L7,9H3Z" class="pswp__icn-sound-on" id="pswp__icn-sound-on"/><path d="M12,4L9.91,6.09L12,8.18M4.27,3L3,4.27L7.73,9H3V15H7L12,20V13.27L16.25,17.53C15.58,18.04 14.83,18.46 14,18.7V20.77C15.38,20.45 16.63,19.82 17.68,18.96L19.73,21L21,19.73L12,10.73M19,12C19,12.94 18.8,13.82 18.46,14.64L19.97,16.15C20.62,14.91 21,13.5 21,12C21,7.72 18,4.14 14,3.23V5.29C16.89,6.15 19,8.83 19,12M16.5,12C16.5,10.23 15.5,8.71 14,7.97V10.18L16.45,12.63C16.5,12.43 16.5,12.21 16.5,12Z" class="pswp__icn-sound-off" id="pswp__icn-sound-off"/>',
+        size: 24,
+      },
+      onInit: (el) => {
+        soundButtonEl = el;
+        try {
+          const saved = window.sessionStorage.getItem("cloudpaste.lightbox.muted");
+          if (saved === "true" || saved === "false") {
+            session.muted = saved === "true";
+          }
+        } catch {
+          // ignore
+        }
+        pswp.on("change", () => {
+          updateSoundButton();
+          applyMutedToCurrentVideo();
+        });
+        updateSoundButton();
+        applyTransformToSlide(pswp.currSlide);
+      },
+      onClick: () => {
+        session.muted = !session.muted;
+        try {
+          window.sessionStorage.setItem("cloudpaste.lightbox.muted", String(session.muted));
+        } catch {
+          // ignore
+        }
+        updateSoundButton();
+        applyMutedToCurrentVideo();
+      },
+    });
+
+    // 旋转 / 上下翻转
+    pswp.ui.registerElement({
+      name: "rotate-button",
+      className: "pswp__button pswp__button--rotate pswp__button--mdi",
+      title: "旋转",
+      ariaLabel: "旋转",
+      order: 10,
+      isButton: true,
       html: {
         isCustomSVG: true,
         inner:
           '<path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z" id="pswp__icn-rotate"/>',
         outlineID: "pswp__icn-rotate",
+        size: 24,
       },
-      onClick: (_, __, pswp) => {
-        try {
-          const currentSlide = pswp.currSlide;
-          if (!currentSlide || !currentSlide.content) {
-            console.warn("⚠️ 旋转按钮: 当前幻灯片不可用");
-            return;
-          }
-
-          // 获取当前图片的唯一标识
-          const imageKey = currentSlide.data.src;
-          if (!imageKey) {
-            console.warn("⚠️ 旋转按钮: 图片URL不可用");
-            return;
-          }
-
-          const currentRotation = imageRotations.get(imageKey) || 0;
-          const newRotation = (currentRotation + 90) % 360;
-
-          // 更新旋转角度
-          imageRotations.set(imageKey, newRotation);
-
-          // 应用CSS变换到图片元素，保持翻转状态
-          const imageElement = currentSlide.content.element;
-          if (imageElement) {
-            // 获取当前的transform值，保持翻转状态
-            const currentTransform = imageElement.style.transform || "";
-            const scaleMatch = currentTransform.match(/scaleY\([^)]*\)/);
-            const scaleTransform = scaleMatch ? scaleMatch[0] : "";
-
-            // 组合变换：翻转 + 旋转
-            const rotateTransform = `rotate(${newRotation}deg)`;
-            const combinedTransform = [scaleTransform, rotateTransform].filter(Boolean).join(" ");
-
-            imageElement.style.transform = combinedTransform;
-            imageElement.style.transition = "transform 0.3s ease";
-
-          } else {
-            console.warn("⚠️ 旋转按钮: 图片元素不可用");
-          }
-        } catch (error) {
-          console.error("❌ 旋转按钮操作失败:", error);
-        }
-      },
+      onClick: () => rotateCurrent(),
     });
-  };
 
-  /**
-   * 注册翻转按钮
-   * 使用PhotoSwipe官方API，保持原生风格
-   */
-  const registerFlipButton = (pswp) => {
-    // 存储每张图片的翻转状态
-    const imageFlips = new Map();
+    let flipButtonEl = null;
+    const updateFlipButton = () => {
+      if (!flipButtonEl) return;
+      const slide = pswp?.currSlide;
+      const key = getTransformKey(slide);
+      const state = getTransformState(key);
+      flipButtonEl.classList.toggle("is-active", !!state.flipY);
+    };
 
     pswp.ui.registerElement({
-      name: "flip-button",
-      title: "翻转",
-      ariaLabel: "上下翻转图片",
-      order: 7.5, // 在旋转按钮之后，下载按钮之前
+      name: "flip-vertical-button",
+      className: "pswp__button pswp__button--flip-vertical pswp__button--mdi",
+      title: "上下翻转",
+      ariaLabel: "上下翻转",
+      order: 10,
       isButton: true,
       html: {
         isCustomSVG: true,
-        inner: '<path d="M16 4l4 4h-3v8h-2V8h-3l4-4zm0 24l-4-4h3v-8h2v8h3l-4 4zM8 14h2v4H8v-4zm14 0h2v4h-2v-4z" id="pswp__icn-flip"/>',
-        outlineID: "pswp__icn-flip",
+        inner: '<path d="M12 3l4 4h-3v10h-2V7H8l4-4zm0 18l-4-4h3V7h2v10h3l-4 4z" id="pswp__icn-flip-vertical"/>',
+        outlineID: "pswp__icn-flip-vertical",
+        size: 24,
       },
-      onClick: (_, __, pswp) => {
-        try {
-          const currentSlide = pswp.currSlide;
-          if (!currentSlide || !currentSlide.content) {
-            console.warn("⚠️ 翻转按钮: 当前幻灯片不可用");
-            return;
-          }
-
-          // 获取当前图片的唯一标识
-          const imageKey = currentSlide.data.src;
-          if (!imageKey) {
-            console.warn("⚠️ 翻转按钮: 图片URL不可用");
-            return;
-          }
-
-          const currentFlip = imageFlips.get(imageKey) || false;
-          const newFlip = !currentFlip;
-
-          // 更新翻转状态
-          imageFlips.set(imageKey, newFlip);
-
-          // 应用CSS变换到图片元素
-          const imageElement = currentSlide.content.element;
-          if (imageElement) {
-            // 获取当前的transform值，保持旋转状态
-            const currentTransform = imageElement.style.transform || "";
-            const rotateMatch = currentTransform.match(/rotate\([^)]*\)/);
-            const rotateTransform = rotateMatch ? rotateMatch[0] : "";
-
-            // 组合变换：翻转 + 旋转
-            const flipTransform = newFlip ? "scaleY(-1)" : "";
-            const combinedTransform = [flipTransform, rotateTransform].filter(Boolean).join(" ");
-
-            imageElement.style.transform = combinedTransform;
-            imageElement.style.transition = "transform 0.3s ease";
-
-          } else {
-            console.warn("⚠️ 翻转按钮: 图片元素不可用");
-          }
-        } catch (error) {
-          console.error("❌ 翻转按钮操作失败:", error);
-        }
+      onInit: (el) => {
+        flipButtonEl = el;
+        pswp.on("change", updateFlipButton);
+        updateFlipButton();
+      },
+      onClick: () => {
+        toggleFlipVerticalCurrent();
+        updateFlipButton();
       },
     });
-  };
 
-  /**
-   * 注册图片信息显示
-   * 使用PhotoSwipe官方API，保持原生风格
-   */
-  const registerImageInfo = (pswp) => {
+    // 菜单
     pswp.ui.registerElement({
-      name: "image-info",
-      className: "pswp__image-info",
-      appendTo: "wrapper", // 添加到wrapper而不是toolbar
-      onInit: (el, pswp) => {
-        try {
-          // 创建信息容器
-          el.innerHTML = `
-            <div class="pswp__image-info-content">
-              <div class="pswp__image-name"></div>
-              <div class="pswp__image-details"></div>
-            </div>
-          `;
+      name: "menu-button",
+      className: "pswp__button pswp__button--menu-button pswp__button--mdi",
+      title: "更多",
+      ariaLabel: "更多",
+      order: 10,
+      isButton: true,
+      html: {
+        isCustomSVG: true,
+        inner: '<path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" id="pswp__icn-menu-button" />',
+        outlineID: "pswp__icn-menu-button",
+        size: 16,
+      },
+      onInit: (el) => session.handlers?.onMenuButtonInit?.(el),
+      onClick: () => session.handlers?.onToggleMenu?.(),
+    });
 
-          const nameEl = el.querySelector(".pswp__image-name");
-          const detailsEl = el.querySelector(".pswp__image-details");
+    // 全屏
+    pswp.ui.registerElement({
+      name: "fullscreen-toggle",
+      className: "pswp__button pswp__button--fullscreen-toggle pswp__button--mdi",
+      title: "全屏",
+      ariaLabel: "全屏",
+      order: 10,
+      isButton: true,
+      html: {
+        isCustomSVG: true,
+        inner:
+          '<path d="M7 14H5v5h5v-2H7v-3zm0-4h2V7h3V5H5v5zm10 7h-3v2h5v-5h-2v3zm0-12V7h-3v2h5V5h-2z" id="pswp__icn-fullscreen"/>',
+        outlineID: "pswp__icn-fullscreen",
+        size: 24,
+      },
+      onClick: () => session.handlers?.onToggleFullscreen?.(),
+    });
 
-          if (!nameEl || !detailsEl) {
-            console.error("❌ 图片信息显示: 无法找到信息元素");
-            return;
-          }
-
-          // 更新图片信息
-          const updateImageInfo = () => {
-            try {
-              const currentSlide = pswp.currSlide;
-              if (currentSlide && currentSlide.data) {
-                const image = currentSlide.data.originalImage;
-                const name = image?.name || "Unknown";
-                const width = currentSlide.data.width || "Unknown";
-                const height = currentSlide.data.height || "Unknown";
-                const size = image?.size ? formatFileSize(image.size) : "";
-
-                nameEl.textContent = name;
-                detailsEl.textContent = `${width} × ${height}${size ? ` • ${size}` : ""}`;
-              } else {
-                nameEl.textContent = "Unknown";
-                detailsEl.textContent = "";
-              }
-            } catch (error) {
-              console.error("❌ 更新图片信息失败:", error);
-            }
-          };
-
-          // 监听图片切换
-          pswp.on("change", updateImageInfo);
-
-          // 初始更新
-          updateImageInfo();
-
-        } catch (error) {
-          console.error("❌ 图片信息显示初始化失败:", error);
-        }
+    // 幻灯片
+    let slideshowButtonEl = null;
+    pswp.ui.registerElement({
+      name: "slideshow-toggle",
+      className: "pswp__button pswp__button--slideshow-toggle pswp__button--mdi",
+      title: "幻灯片",
+      ariaLabel: "幻灯片",
+      order: 10,
+      isButton: true,
+      html: {
+        isCustomSVG: true,
+        inner:
+          '<path d="M14 19h4V5h-4v14zM6 19h4V5H6v14z" id="pswp__icn-slideshow-on" class="pswp__icn-slideshow-on" /><path d="M8 5.14v14l11-7-11-7z" id="pswp__icn-slideshow-off" class="pswp__icn-slideshow-off" />',
+        size: 24,
+      },
+      onInit: (el) => {
+        slideshowButtonEl = el;
+        const update = () => {
+          const active = session.handlers?.getSlideshowActive?.();
+          el.classList.toggle("is-active", !!active);
+        };
+        pswp.on("change", update);
+        update();
+      },
+      onClick: () => {
+        session.handlers?.onToggleSlideshow?.();
+        // 不等待外部状态回流，直接基于 getter 重新计算
+        queueMicrotask(() => {
+          const active = session.handlers?.getSlideshowActive?.();
+          slideshowButtonEl?.classList.toggle("is-active", !!active);
+        });
       },
     });
   };
 
-  /**
-   * 格式化文件大小
-   * 工具函数，用于显示文件大小
-   */
-  const formatFileSize = (bytes) => {
-    if (!bytes) return "";
+  const registerCaptionUI = () => {
+    const pswp = lightbox.value?.pswp;
+    if (!pswp) return;
 
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + " " + sizes[i];
+    pswp.ui.registerElement({
+      name: "cloudpaste-caption",
+      className: "pswp__cloudpaste-caption",
+      appendTo: "root",
+      order: 9,
+      isButton: false,
+      html: "",
+      onInit: (el, pswp) => {
+        let isPointerDown = false;
+        let revealTimer = null;
+
+        const clearRevealTimer = () => {
+          if (!revealTimer) return;
+          clearTimeout(revealTimer);
+          revealTimer = null;
+        };
+
+        const isZoomedIn = () => {
+          const slide = pswp?.currSlide;
+          const fit = slide?.zoomLevels?.fit;
+          const current = slide?.currZoomLevel;
+          if (!fit || !current) return false;
+          return current > fit + 0.01;
+        };
+
+        const setFaded = (faded) => {
+          el.classList.toggle("is-faded", !!faded);
+        };
+
+        const update = () => {
+          const item = pswp?.currSlide?.data?.__cloudpasteItem;
+          const name = item?.name || "";
+          el.textContent = name;
+          if (name) el.setAttribute("title", name);
+        };
+
+        const updateVisibility = () => {
+          setFaded(isPointerDown || isZoomedIn());
+        };
+
+        const scheduleReveal = () => {
+          clearRevealTimer();
+          revealTimer = setTimeout(() => {
+            if (!isPointerDown && !isZoomedIn()) setFaded(false);
+          }, 120);
+        };
+
+        pswp.on("change", () => {
+          update();
+          updateVisibility();
+        });
+
+        pswp.on("zoomPanUpdate", () => {
+          if (isZoomedIn()) {
+            clearRevealTimer();
+            setFaded(true);
+          } else if (!isPointerDown) {
+            scheduleReveal();
+          }
+        });
+
+        pswp.on("pointerDown", () => {
+          isPointerDown = true;
+          clearRevealTimer();
+          setFaded(true);
+        });
+
+        pswp.on("pointerUp", () => {
+          isPointerDown = false;
+          if (!isZoomedIn()) scheduleReveal();
+        });
+
+        pswp.on("destroy", () => {
+          clearRevealTimer();
+        });
+
+        update();
+        updateVisibility();
+      },
+    });
+  };
+
+  const renderLivePhotoContent = async (e, item) => {
+    const content = e?.content;
+    if (!content || !item) return;
+
+    e.preventDefault();
+
+    const videoPath = item.__cloudpasteLivePhotoVideoPath;
+    const ctrl = new AbortController();
+
+    const root = document.createElement("div");
+    // 统一 Live Photo 样式：复用 LivePhotoViewer.css 的 badge 视觉与暗色主题变量
+    root.className = "pswp__media pswp__media--live live-photo-viewer--dark";
+
+    const img = document.createElement("img");
+    img.className = "pswp__image";
+    img.decoding = "async";
+    img.alt = item?.name || "";
+
+    const video = document.createElement("video");
+    video.className = "pswp__video";
+    video.playsInline = true;
+    video.setAttribute("playsinline", "");
+    video.muted = !!session.muted;
+    if (session.muted) {
+      video.setAttribute("muted", "");
+    }
+    video.preload = "metadata";
+
+    const badge = document.createElement("button");
+    badge.type = "button";
+    badge.className = "live-photo-viewer__badge";
+    badge.setAttribute("aria-label", "播放实况（按住播放 / 点击切换）");
+    badge.setAttribute("title", "播放实况（按住播放 / 点击切换）");
+    badge.innerHTML = `
+      ${LIVE_PHOTO_BADGE_ICON_SVG}
+      <span class="live-photo-viewer__badge-text">LIVE</span>
+    `;
+
+    const control = document.createElement("button");
+    control.type = "button";
+    control.className = "pswp__live-toggle";
+    control.setAttribute("aria-label", "播放实况");
+    control.setAttribute("title", "播放 / 暂停");
+    control.innerHTML = `
+      <svg class="pswp__live-toggle-icon pswp__live-toggle-icon--play" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M8 5v14l11-7-11-7z" />
+      </svg>
+      <svg class="pswp__live-toggle-icon pswp__live-toggle-icon--pause" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+      </svg>
+    `;
+
+    root.appendChild(img);
+    root.appendChild(video);
+    root.appendChild(badge);
+    root.appendChild(control);
+
+    content.element = root;
+
+    const signal = session.abortController?.signal;
+    const state = {
+      playing: false,
+      loading: false,
+      holdActive: false,
+      holdTimer: /** @type {ReturnType<typeof setTimeout> | null} */ (null),
+      videoUrl: "",
+    };
+
+    const cleanup = () => {
+      try {
+        ctrl.abort();
+      } catch {
+        // ignore
+      }
+      try {
+        video.pause();
+      } catch {
+        // ignore
+      }
+      try {
+        video.removeAttribute("src");
+        video.load?.();
+      } catch {
+        // ignore
+      }
+    };
+
+    content.data.__cloudpasteCleanup = cleanup;
+
+    // 先加载图片封面
+    try {
+      const src = await ensureImageSrc(item, { signal });
+      if (signal?.aborted) return;
+      img.src = src;
+    } catch {
+      // 允许继续，让 PhotoSwipe 走 error UI
+    }
+
+    const clearHoldTimer = () => {
+      if (!state.holdTimer) return;
+      clearTimeout(state.holdTimer);
+      state.holdTimer = null;
+    };
+
+    const setPlaying = (v) => {
+      state.playing = !!v;
+      root.classList.toggle("live-photo-viewer--playing", state.playing);
+      badge.setAttribute("aria-label", state.playing ? "暂停实况" : "播放实况（按住播放 / 点击切换）");
+      control.classList.toggle("is-playing", state.playing);
+      control.setAttribute("aria-label", state.playing ? "暂停实况" : "播放实况");
+    };
+
+    const setLoading = (v) => {
+      state.loading = !!v;
+      root.classList.toggle("live-photo-viewer--loading", state.loading);
+      badge.disabled = state.loading;
+      control.disabled = state.loading;
+    };
+
+    const ensureVideoUrl = async () => {
+      if (state.videoUrl) return state.videoUrl;
+      if (!videoPath || !session.resolveVideoSrc) return "";
+      const url = await session.resolveVideoSrc(videoPath);
+      state.videoUrl = url || "";
+      return state.videoUrl;
+    };
+
+    const play = async () => {
+      if (signal?.aborted) return;
+      if (state.playing) return;
+      try {
+        setLoading(true);
+        const url = await ensureVideoUrl();
+        if (!url) return;
+        if (!video.src) {
+          video.src = url;
+        }
+        await video.play();
+        setPlaying(true);
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const pause = () => {
+      clearHoldTimer();
+      state.holdActive = false;
+      try {
+        video.pause();
+      } catch {
+        // ignore
+      }
+      setPlaying(false);
+    };
+
+    const toggle = () => {
+      if (state.playing) {
+        pause();
+      } else {
+        void play();
+      }
+    };
+
+    // B：按住播放（主），点击切换（辅）
+    root.addEventListener(
+      "pointerdown",
+      (ev) => {
+        if (ev?.target?.closest?.(".live-photo-viewer__badge, .pswp__live-toggle")) return;
+        if (state.playing) return;
+        if (ev.pointerType === "mouse" && ev.button !== 0) return;
+
+        try {
+          root.setPointerCapture?.(ev.pointerId);
+        } catch {
+          // ignore
+        }
+
+        // 说明：未静音时，浏览器通常要求“同步用户手势”才能带声音播放。
+        if (!session.muted) {
+          state.holdActive = true;
+          void play();
+          return;
+        }
+
+        clearHoldTimer();
+        state.holdTimer = setTimeout(() => {
+          state.holdActive = true;
+          void play();
+        }, 160);
+      },
+      { signal: ctrl.signal }
+    );
+
+    root.addEventListener(
+      "pointerup",
+      (ev) => {
+        clearHoldTimer();
+        if (state.holdActive) {
+          pause();
+        }
+        try {
+          root.releasePointerCapture?.(ev.pointerId);
+        } catch {
+          // ignore
+        }
+      },
+      { signal: ctrl.signal }
+    );
+
+    root.addEventListener(
+      "pointercancel",
+      () => {
+        clearHoldTimer();
+        if (state.holdActive) pause();
+      },
+      { signal: ctrl.signal }
+    );
+
+    badge.addEventListener(
+      "click",
+      (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggle();
+      },
+      { signal: ctrl.signal }
+    );
+
+    control.addEventListener(
+      "click",
+      (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggle();
+      },
+      { signal: ctrl.signal }
+    );
+
+    video.addEventListener(
+      "ended",
+      () => {
+        setPlaying(false);
+      },
+      { signal: ctrl.signal }
+    );
+
+    content.onLoaded();
+  };
+
+  const ensureImageSrc = async (item, options = {}) => {
+    const signal = options.signal;
+    if (signal?.aborted) throw new Error("aborted");
+
+    const state = session.imageStates ? session.imageStates.get(item?.path) : null;
+    if (state?.status === "loaded" && state?.url) return state.url;
+
+    if (typeof session.loadImageUrl === "function") {
+      await session.loadImageUrl(item, { priority: options.priority || "high", signal });
+    }
+
+    const nextState = session.imageStates ? session.imageStates.get(item?.path) : null;
+    if (nextState?.status === "loaded" && nextState?.url) return nextState.url;
+    throw new Error("image src unavailable");
+  };
+
+  const prefetchAround = async (idx) => {
+    const signal = session.abortController?.signal;
+    if (!Array.isArray(session.items) || session.items.length === 0) return;
+    if (signal?.aborted) return;
+
+    const candidates = [idx - 2, idx - 1, idx + 1, idx + 2];
+    for (const i of candidates) {
+      if (i < 0 || i >= session.items.length) continue;
+      const item = session.items[i];
+      if (!item) continue;
+      // 未就绪/被取消都不应在控制台产生未处理的 Promise rejection
+      void ensureImageSrc(item, { signal, priority: "normal" }).catch(() => {});
+    }
+  };
+
+  const openPhotoSwipe = async (items, startIndex = 0, imageStatesArg = null, loadImageUrlArg = null, options = {}) => {
+    if (!Array.isArray(items) || items.length === 0) return;
+
+    if (!isInitialized.value) {
+      initPhotoSwipe();
+      await nextTick();
+    }
+    if (!lightbox.value) return;
+
+    session.items = items;
+    session.imageStates = imageStatesArg;
+    session.loadImageUrl = typeof loadImageUrlArg === "function" ? loadImageUrlArg : null;
+    session.darkMode = !!options.darkMode;
+
+    session.abortController?.abort();
+    session.abortController = new AbortController();
+
+    const validStartIndex = Math.max(0, Math.min(startIndex, items.length - 1));
+
+    // 打开前先确保首张图片具备 src，避免长时间空白
+    const first = items[validStartIndex];
+    if (first) {
+      try {
+        await ensureImageSrc(first, { signal: session.abortController.signal, priority: "high" });
+      } catch {
+        // ignore
+      }
+    }
+
+    lightbox.value.loadAndOpen(validStartIndex, items);
+    void prefetchAround(validStartIndex);
+  };
+
+  const closePhotoSwipe = () => {
+    try {
+      lightbox.value?.pswp?.close?.();
+    } catch {
+      // ignore
+    }
+  };
+
+  const destroyPhotoSwipe = () => {
+    try {
+      lightbox.value?.destroy?.();
+    } catch {
+      // ignore
+    }
+    lightbox.value = null;
+    isInitialized.value = false;
   };
 
   return {
-    // 状态
     isInitialized,
-
-    // 方法
     initPhotoSwipe,
     openPhotoSwipe,
+    closePhotoSwipe,
     destroyPhotoSwipe,
+    setAppendToEl,
+    setExternalHandlers,
+    setVideoResolver,
+    getPswp,
+    rotateCurrent,
+    toggleFlipVerticalCurrent,
   };
 }

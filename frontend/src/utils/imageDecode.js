@@ -16,6 +16,181 @@ async function loadLibheif() {
   return mod?.default ?? mod;
 }
 
+const createAbortError = () => {
+  // DOMException 在部分环境可能不可用
+  try {
+    return new DOMException("Aborted", "AbortError");
+  } catch {
+    const err = new Error("Aborted");
+    err.name = "AbortError";
+    return err;
+  }
+};
+
+const createSemaphore = (max) => {
+  let active = 0;
+  /** @type {Array<() => void>} */
+  const queue = [];
+
+  const acquire = () => {
+    if (active < max) {
+      active += 1;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => queue.push(resolve)).then(() => {
+      active += 1;
+    });
+  };
+
+  const release = () => {
+    active = Math.max(0, active - 1);
+    const next = queue.shift();
+    if (next) next();
+  };
+
+  const run = async (fn) => {
+    await acquire();
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  };
+
+  return { run };
+};
+
+// HEIC/HEIF 解码：
+// - 解码在 Worker 内执行，主线程不会被阻塞
+// 默认值取 2
+const HEIF_DECODE_WORKER_POOL_SIZE = 2;
+const heifDecodeSemaphore = createSemaphore(HEIF_DECODE_WORKER_POOL_SIZE);
+
+/** @type {Worker[]|null} */
+let heifDecodeWorkers = null;
+/** @type {Array<Map<string, { resolve: Function, reject: Function }>>} */
+let heifWorkerPendingByIndex = [];
+/** @type {Map<string, number>} */
+const heifWorkerIndexById = new Map();
+let heifWorkerRoundRobin = 0;
+
+const createHeifWorker = (index) => {
+  const worker = new Worker(new URL("../workers/heifDecodeWorker.js", import.meta.url), { type: "module" });
+
+  worker.addEventListener("message", (event) => {
+    const data = event?.data || {};
+    const { id, ok } = data;
+    if (!id) return;
+    const pendingMap = heifWorkerPendingByIndex[index];
+    const pending = pendingMap?.get(id);
+    if (!pending) return;
+    pendingMap.delete(id);
+    heifWorkerIndexById.delete(id);
+    if (ok) {
+      pending.resolve(data);
+    } else {
+      const err = new Error(data?.error?.message || "HEIF Worker 解码失败");
+      err.name = data?.error?.name || "Error";
+      err.code = data?.error?.code;
+      pending.reject(err);
+    }
+  });
+
+  worker.addEventListener("error", (e) => {
+    // 单 worker 崩溃：拒绝当前 worker 下全部 pending，并允许后续重建
+    const pendingMap = heifWorkerPendingByIndex[index];
+    if (pendingMap) {
+      pendingMap.forEach(({ reject }, id) => {
+        heifWorkerIndexById.delete(id);
+        reject(e);
+      });
+      pendingMap.clear();
+    }
+    try {
+      worker.terminate();
+    } catch {
+      // ignore
+    }
+    if (heifDecodeWorkers) {
+      heifDecodeWorkers[index] = null;
+    }
+  });
+
+  return worker;
+};
+
+const getHeifDecodeWorkers = () => {
+  if (typeof Worker === "undefined") return null;
+  if (heifDecodeWorkers && heifDecodeWorkers.length === HEIF_DECODE_WORKER_POOL_SIZE) return heifDecodeWorkers;
+
+  heifDecodeWorkers = new Array(HEIF_DECODE_WORKER_POOL_SIZE);
+  heifWorkerPendingByIndex = new Array(HEIF_DECODE_WORKER_POOL_SIZE).fill(null).map(() => new Map());
+
+  for (let i = 0; i < HEIF_DECODE_WORKER_POOL_SIZE; i += 1) {
+    heifDecodeWorkers[i] = createHeifWorker(i);
+  }
+
+  return heifDecodeWorkers;
+};
+
+const pickHeifWorkerIndex = () => {
+  const index = heifWorkerRoundRobin % HEIF_DECODE_WORKER_POOL_SIZE;
+  heifWorkerRoundRobin += 1;
+  return index;
+};
+
+const decodeHeifToObjectUrlViaWorker = async ({ url, signal, outputType, quality } = {}) => {
+  const workers = getHeifDecodeWorkers();
+  if (!workers) {
+    const err = new Error("Worker 不可用");
+    err.code = "WORKER_UNAVAILABLE";
+    throw err;
+  }
+
+  const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const index = pickHeifWorkerIndex();
+  const worker = workers[index] || (workers[index] = createHeifWorker(index));
+
+  const abortHandler = () => {
+    try {
+      worker.postMessage({ type: "abort", id });
+    } catch {
+      // ignore
+    }
+    const pendingMap = heifWorkerPendingByIndex[index];
+    const pending = pendingMap?.get(id);
+    if (!pending) return;
+    pendingMap.delete(id);
+    heifWorkerIndexById.delete(id);
+    pending.reject(createAbortError());
+  };
+
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+
+  return new Promise((resolve, reject) => {
+    heifWorkerIndexById.set(id, index);
+    heifWorkerPendingByIndex[index].set(id, { resolve, reject });
+    if (signal) signal.addEventListener("abort", abortHandler, { once: true });
+    try {
+      worker.postMessage({ type: "decode", id, url, outputType, quality });
+    } catch (e) {
+      heifWorkerIndexById.delete(id);
+      heifWorkerPendingByIndex[index].delete(id);
+      reject(e);
+    }
+  }).finally(() => {
+    if (signal) {
+      try {
+        signal.removeEventListener("abort", abortHandler);
+      } catch {
+        // ignore
+      }
+    }
+  });
+};
+
 /**
  * 判断是否为 HEIC/HEIF 图片
  * @param {{ filename?: string; mimetype?: string }} input
@@ -56,18 +231,18 @@ export function shouldAttemptDecodeImagePreview({ filename = "", mimetype = "" }
  */
 
 /**
- * 将 HEIC/HEIF/AVIF 的预览 URL 解码为 PNG
+ * 将 HEIC/HEIF/AVIF 的预览 URL 解码为图片 objectURL
  *
- * @param {{ url: string; filename?: string; mimetype?: string; signal?: AbortSignal }} input
+ * @param {{ url: string; filename?: string; mimetype?: string; signal?: AbortSignal; outputType?: string; quality?: number }} input
  * @returns {Promise<DecodedPreview>}
  */
-export async function decodeImagePreviewUrlToPngObjectUrl({ url, filename = "", mimetype = "", signal } = {}) {
+export async function decodeImagePreviewUrlToObjectUrl({ url, filename = "", mimetype = "", signal, outputType = "image/png", quality } = {}) {
   if (!url) {
     throw new Error("缺少图片预览 URL，无法解码");
   }
 
   if (isHeifImage({ filename, mimetype })) {
-    return decodeHeifToPngObjectUrl({ url, signal });
+    return decodeHeifToObjectUrl({ url, signal, outputType, quality });
   }
 
   if (isAvifImage({ filename, mimetype })) {
@@ -78,13 +253,48 @@ export async function decodeImagePreviewUrlToPngObjectUrl({ url, filename = "", 
 }
 
 /**
- * 解码 HEIC/HEIF 为 PNG objectURL
- * - 使用 libheif-js/wasm-bundle
+ * 兼容旧调用：默认输出 PNG
+ * @param {{ url: string; filename?: string; mimetype?: string; signal?: AbortSignal }} input
+ */
+export async function decodeImagePreviewUrlToPngObjectUrl({ url, filename = "", mimetype = "", signal } = {}) {
+  return decodeImagePreviewUrlToObjectUrl({ url, filename, mimetype, signal, outputType: "image/png" });
+}
+
+/**
+ * 解码 HEIC/HEIF 为图片 objectURL
+ * - 优先使用 Worker + OffscreenCanvas
+ * - Worker 不可用时降级到主线程解码
  *
- * @param {{ url: string; signal?: AbortSignal }} input
+ * @param {{ url: string; signal?: AbortSignal; outputType?: string; quality?: number }} input
  * @returns {Promise<DecodedPreview>}
  */
-export async function decodeHeifToPngObjectUrl({ url, signal } = {}) {
+export async function decodeHeifToObjectUrl({ url, signal, outputType = "image/png", quality } = {}) {
+  return heifDecodeSemaphore.run(async () => {
+    if (signal?.aborted) throw createAbortError();
+
+    // 优先走 Worker
+    try {
+      const data = await decodeHeifToObjectUrlViaWorker({ url, signal, outputType, quality });
+      const blob = data?.blob;
+      if (!blob) {
+        throw new Error("HEIF Worker 返回数据缺失（blob）");
+      }
+      const objectUrl = URL.createObjectURL(blob);
+      return { objectUrl, width: data.width, height: data.height };
+    } catch (e) {
+      // Abort 直接抛出
+      if (e?.name === "AbortError") throw e;
+      // OffscreenCanvas/Worker 不支持等场景：降级主线程
+      return decodeHeifToPngObjectUrlMainThread({ url, signal, outputType, quality });
+    }
+  });
+}
+
+/**
+ * 主线程降级解码（保留旧逻辑）
+ * @param {{ url: string; signal?: AbortSignal; outputType?: string; quality?: number }} input
+ */
+async function decodeHeifToPngObjectUrlMainThread({ url, signal, outputType = "image/png", quality } = {}) {
   const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(`获取 HEIC/HEIF 数据失败: ${response.status}`);
@@ -144,8 +354,8 @@ export async function decodeHeifToPngObjectUrl({ url, signal } = {}) {
         }
         resolve(b);
       },
-      "image/png",
-      1,
+      outputType,
+      typeof quality === "number" ? quality : 1,
     );
   });
 

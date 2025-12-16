@@ -376,6 +376,9 @@
       @close="handleCloseSettingsDrawer"
     />
 
+    <!-- FS 媒体查看器（Lightbox Shell） -->
+    <FsMediaLightboxDialog />
+
     <!-- 悬浮操作栏 (当有选中项时显示) -->
     <FloatingActionBar
       v-if="hasPermission && selectedCount > 0"
@@ -438,6 +441,7 @@ import PathPasswordDialog from "@/modules/fs/components/shared/modals/PathPasswo
 import ConfirmDialog from "@/components/common/dialogs/ConfirmDialog.vue";
 import InputDialog from "@/components/common/dialogs/InputDialog.vue";
 import FileBasketPanel from "@/modules/fs/components/shared/FileBasketPanel.vue";
+import FsMediaLightboxDialog from "@/modules/fs/components/lightbox/FsMediaLightboxDialog.vue";
 import PermissionManager from "@/components/common/PermissionManager.vue";
 import SettingsDrawer from "@/modules/fs/components/shared/SettingsDrawer.vue";
 import FloatingActionBar from "@/modules/fs/components/shared/FloatingActionBar.vue";

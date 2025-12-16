@@ -6,7 +6,7 @@
 import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useFsService } from "@/modules/fs";
-import { decodeImagePreviewUrlToPngObjectUrl, revokeObjectUrl, shouldAttemptDecodeImagePreview } from "@/utils/imageDecode";
+import { decodeImagePreviewUrlToObjectUrl, revokeObjectUrl, shouldAttemptDecodeImagePreview } from "@/utils/imageDecode";
 
 const INITIAL_RENDER_LIMIT = 120;
 const RENDER_BATCH = 120;
@@ -278,11 +278,13 @@ export function useGalleryView(input = {}) {
 
       // HEIC/HEIF：按扩展名/类型预判，直接走 wasm 解码，避免“先失败再解码”的二次开销
       if (shouldAttemptDecodeImagePreview({ filename: image?.name || "", mimetype: image?.mimetype || "" })) {
-        const decoded = await decodeImagePreviewUrlToPngObjectUrl({
+        const decoded = await decodeImagePreviewUrlToObjectUrl({
           url: previewUrl,
           filename: image?.name || "",
           mimetype: image?.mimetype || "",
           signal,
+          outputType: "image/webp",
+          quality: 0.9,
         });
 
         const prevUrl = currentState?.url || "";
