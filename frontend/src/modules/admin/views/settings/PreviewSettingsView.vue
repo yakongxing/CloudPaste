@@ -174,14 +174,7 @@
                     : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50 hover:border-gray-400',
                 ]"
               >
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
+                <IconRefresh size="sm" class="mr-2" aria-hidden="true" />
                 {{ t("admin.preview.resetDefaults") }}
               </button>
 
@@ -191,14 +184,7 @@
                 class="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-colors"
                 :class="status.loading ? 'opacity-50 cursor-not-allowed' : ''"
               >
-                <svg v-if="status.loading" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path
-                    class="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
+                <IconRefresh v-if="status.loading" size="sm" class="animate-spin -ml-1 mr-2 text-white inline" aria-hidden="true" />
                 {{ status.loading ? t("admin.global.buttons.updating") : t("admin.global.buttons.updateSettings") }}
               </button>
             </div>
@@ -219,6 +205,7 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
+import { IconRefresh } from "@/components/icons";
 import { useAdminSystemService } from "@/modules/admin/services/systemService.js";
 import { useThemeMode } from "@/composables/core/useThemeMode.js";
 import { useGlobalMessage } from "@/composables/core/useGlobalMessage.js";

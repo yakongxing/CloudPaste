@@ -9,6 +9,7 @@ import { formatDateTime, formatDateTimeWithSeconds } from "@/utils/timeUtils.js"
 import AdminTable from "@/components/common/AdminTable.vue";
 import ConfirmDialog from "@/components/common/dialogs/ConfirmDialog.vue";
 import ScheduledJobDetailModal from "@/modules/admin/components/ScheduledJobDetailModal.vue";
+import { IconArrowUp, IconCheckCircle, IconChevronDown, IconDelete, IconEye, IconFolderPlus, IconRefresh, IconRename, IconSearch, IconXCircle } from "@/components/icons";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -605,27 +606,21 @@ const jobColumnClasses = {
           <!-- 批量操作按钮（选中时显示） -->
           <template v-if="selectedJobs.length > 0">
             <button @click="handleBatchEnable" class="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white transition-all duration-200" :class="darkMode ? 'bg-green-600 hover:bg-green-700' : 'bg-green-500 hover:bg-green-600'">
-              <svg class="h-3 w-3 sm:h-4 sm:w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <IconCheckCircle class="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
               <span class="hidden xs:inline">
                 {{ t('admin.scheduledJobs.actions.enable') }} ({{ selectedJobs.length }})
               </span>
               <span class="xs:hidden">{{ t('admin.scheduledJobs.actions.enable') }}</span>
             </button>
             <button @click="handleBatchDisable" class="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white transition-all duration-200" :class="darkMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-gray-500 hover:bg-gray-600'">
-              <svg class="h-3 w-3 sm:h-4 sm:w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <IconXCircle class="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
               <span class="hidden xs:inline">
                 {{ t('admin.scheduledJobs.actions.disable') }} ({{ selectedJobs.length }})
               </span>
               <span class="xs:hidden">{{ t('admin.scheduledJobs.actions.disable') }}</span>
             </button>
             <button @click="handleBatchDelete" class="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white transition-all duration-200" :class="darkMode ? 'bg-red-600 hover:bg-red-700' : 'bg-red-500 hover:bg-red-600'">
-              <svg class="h-3 w-3 sm:h-4 sm:w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
+              <IconDelete class="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
               <span class="hidden xs:inline">
                 {{ t('admin.scheduledJobs.actions.delete') }} ({{ selectedJobs.length }})
               </span>
@@ -636,17 +631,13 @@ const jobColumnClasses = {
           <!-- 常规按钮 -->
           <template v-else>
             <button @click="navigateToCreate" class="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 md:px-4 md:py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white transition-all duration-200" :class="darkMode ? 'bg-primary-600 hover:bg-primary-700' : 'bg-primary-500 hover:bg-primary-600'">
-              <svg class="h-3 w-3 sm:h-4 sm:w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-              </svg>
+              <IconFolderPlus class="h-3 w-3 sm:h-4 sm:w-4 mr-1.5" />
               <span class="hidden xs:inline">{{ t("admin.scheduledJobs.toolbar.createJob") }}</span>
               <span class="xs:hidden">{{ t("admin.scheduledJobs.toolbar.createJob") }}</span>
             </button>
 
             <button @click="handleRefresh" :disabled="loading" class="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 md:px-4 md:py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white transition-all duration-200 disabled:opacity-50" :class="darkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'">
-              <svg class="h-3 w-3 sm:h-4 sm:w-4 mr-1.5" :class="{ 'animate-spin': loading }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+              <IconRefresh class="h-3 w-3 sm:h-4 sm:w-4 mr-1.5" :class="{ 'animate-spin': loading }" />
               <span class="hidden xs:inline">{{ t("admin.scheduledJobs.toolbar.refresh") }}</span>
               <span class="xs:hidden">{{ t("admin.scheduledJobs.toolbar.refresh") }}</span>
             </button>
@@ -668,9 +659,7 @@ const jobColumnClasses = {
 
           <div class="relative">
             <input v-model="searchQuery" type="text" :placeholder="t('admin.scheduledJobs.toolbar.search')" class="pl-8 pr-3 py-1 rounded-md border text-sm w-48 focus:outline-none focus:ring-2 focus:ring-primary-500" :class="darkMode ? 'bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-500' : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400'" />
-            <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none" :class="darkMode ? 'text-gray-500' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            <IconSearch class="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none" :class="darkMode ? 'text-gray-500' : 'text-gray-400'" />
           </div>
         </div>
       </div>
@@ -687,18 +676,13 @@ const jobColumnClasses = {
         <span class="text-sm font-medium" :class="darkMode ? 'text-gray-200' : 'text-gray-700'">
           {{ t('admin.scheduledJobs.stats.sectionTitle') }}
         </span>
-        <svg
+        <IconChevronDown
           class="h-5 w-5 transition-transform"
           :class="[
             isStatsCollapsed ? 'rotate-180' : '',
             darkMode ? 'text-gray-400' : 'text-gray-500'
           ]"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-        </svg>
+        />
       </button>
 
       <!-- 可折叠内容 -->
@@ -786,9 +770,7 @@ const jobColumnClasses = {
         <div class="rounded-lg border p-3 shadow-sm" :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'">
           <div class="text-xs font-medium mb-1 flex items-center gap-1" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
             <span>{{ t('admin.scheduledJobs.stats.pendingJobs') }}</span>
-            <svg v-if="stats.pending > 0" class="h-2 w-2 text-yellow-500 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-              <circle cx="10" cy="10" r="5" />
-            </svg>
+            <span v-if="stats.pending > 0" class="h-2 w-2 rounded-full bg-yellow-500 animate-pulse"></span>
           </div>
           <div class="text-xl font-semibold" :class="darkMode ? 'text-yellow-400' : 'text-yellow-600'">{{ stats.pending }}</div>
         </div>
@@ -797,9 +779,7 @@ const jobColumnClasses = {
         <div class="rounded-lg border p-3 shadow-sm" :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'">
           <div class="text-xs font-medium mb-1 flex items-center gap-1" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
             <span>{{ t('admin.scheduledJobs.stats.runningJobs') }}</span>
-            <svg v-if="stats.running > 0" class="h-2 w-2 text-blue-500 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-              <circle cx="10" cy="10" r="5" />
-            </svg>
+            <span v-if="stats.running > 0" class="h-2 w-2 rounded-full bg-blue-500 animate-pulse"></span>
           </div>
           <div class="text-xl font-semibold" :class="darkMode ? 'text-blue-400' : 'text-blue-600'">{{ stats.running }}</div>
         </div>
@@ -811,10 +791,7 @@ const jobColumnClasses = {
     <div class="flex-1 flex flex-col">
       <!-- 加载状态 -->
       <div v-if="loading" class="flex justify-center items-center h-40">
-        <svg class="animate-spin h-8 w-8 text-primary-500" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
+        <IconRefresh class="animate-spin h-8 w-8 text-primary-500" />
       </div>
 
       <!-- AdminTable 组件 -->
@@ -908,13 +885,8 @@ const jobColumnClasses = {
                     class="flex items-center px-3 py-1.5 rounded text-sm font-medium transition" 
                     :class="job.enabled ? (darkMode ? 'bg-gray-600 hover:bg-gray-700 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-800') : (darkMode ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-green-100 hover:bg-green-200 text-green-800')"
                   >
-                    <svg v-if="job.enabled" class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <svg v-else class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                    <IconXCircle v-if="job.enabled" class="h-4 w-4 mr-1.5" />
+                    <IconCheckCircle v-else class="h-4 w-4 mr-1.5" />
                     {{ job.enabled ? t('admin.scheduledJobs.actions.disable') : t('admin.scheduledJobs.actions.enable') }}
                   </button>
                   
@@ -924,9 +896,7 @@ const jobColumnClasses = {
                     class="flex items-center px-3 py-1.5 rounded text-sm font-medium transition" 
                     :class="darkMode ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-100 hover:bg-blue-200 text-blue-800'"
                   >
-                    <svg class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
+                    <IconArrowUp class="h-4 w-4 mr-1.5" />
                     {{ t('admin.scheduledJobs.actions.runNow') }}
                   </button>
                   
@@ -936,10 +906,7 @@ const jobColumnClasses = {
                     class="flex items-center px-3 py-1.5 rounded text-sm font-medium transition" 
                     :class="darkMode ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-100 hover:bg-blue-200 text-blue-800'"
                   >
-                    <svg class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
+                    <IconEye class="h-4 w-4 mr-1.5" />
                     {{ t('admin.scheduledJobs.actions.viewDetail') }}
                   </button>
                   
@@ -950,9 +917,7 @@ const jobColumnClasses = {
                     class="flex items-center px-3 py-1.5 rounded text-sm font-medium transition disabled:opacity-50"
                     :class="darkMode ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-amber-100 hover:bg-amber-200 text-amber-800'"
                   >
-                    <svg class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
+                    <IconRename class="h-4 w-4 mr-1.5" />
                     {{ t('admin.scheduledJobs.actions.edit') }}
                   </button>
                   
@@ -962,9 +927,7 @@ const jobColumnClasses = {
                     class="flex items-center px-3 py-1.5 rounded text-sm font-medium transition" 
                     :class="darkMode ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-red-100 hover:bg-red-200 text-red-800'"
                   >
-                    <svg class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
+                    <IconDelete class="h-4 w-4 mr-1.5" />
                     {{ t('admin.scheduledJobs.actions.delete') }}
                   </button>
                 </div>

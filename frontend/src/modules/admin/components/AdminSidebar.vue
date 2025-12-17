@@ -58,9 +58,7 @@
                 :class="darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'"
                 :title="t('admin.sidebar.collapse')"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                </svg>
+                <IconChevronLeft size="sm" aria-hidden="true" />
               </button>
             </transition>
 
@@ -76,9 +74,7 @@
               "
               :title="t('admin.sidebar.expand')"
             >
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-              </svg>
+              <IconChevronRight size="xs" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -104,20 +100,16 @@
                 ]"
                 :title="isCollapsed ? item.name : ''"
               >
-                <svg
-                  class="flex-shrink-0 h-6 w-6"
+                <component
+                  :is="getMenuIconComponent(item.icon)"
+                  size="lg"
+                  class="flex-shrink-0"
                   :class="[
                     isCollapsed ? 'mx-auto' : 'mr-3',
                     $route.name === item.routeName ? 'text-primary-500' : darkMode ? 'text-gray-400 group-hover:text-gray-300' : 'text-gray-400 group-hover:text-gray-500',
                   ]"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
                   aria-hidden="true"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getIconPath(item.icon)" />
-                </svg>
+                />
                 <transition
                   name="fade-slide"
                   enter-active-class="transition-all duration-300 delay-100"
@@ -145,17 +137,13 @@
                   ]"
                   :title="item.name"
                 >
-                  <svg
-                    class="h-6 w-6 mx-auto"
+                  <component
+                    :is="getMenuIconComponent(item.icon)"
+                    size="lg"
+                    class="mx-auto"
                     :class="darkMode ? 'text-gray-400 group-hover:text-gray-300' : 'text-gray-400 group-hover:text-gray-500'"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
                     aria-hidden="true"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getIconPath(item.icon)" />
-                  </svg>
+                  />
                 </button>
 
                 <!-- 展开状态：显示完整的组菜单 -->
@@ -169,17 +157,13 @@
                     ]"
                   >
                     <div class="flex items-center">
-                      <svg
-                        class="flex-shrink-0 h-6 w-6"
+                      <component
+                        :is="getMenuIconComponent(item.icon)"
+                        size="lg"
+                        class="flex-shrink-0"
                         :class="[isCollapsed ? 'mx-auto' : 'mr-3', darkMode ? 'text-gray-400 group-hover:text-gray-300' : 'text-gray-400 group-hover:text-gray-500']"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
                         aria-hidden="true"
-                      >
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getIconPath(item.icon)" />
-                      </svg>
+                      />
                       <transition
                         name="fade-slide"
                         enter-active-class="transition-all duration-300 delay-100"
@@ -204,17 +188,12 @@
                       leave-from-class="opacity-100 transform translate-x-0"
                       leave-to-class="opacity-0 transform translate-x-2"
                     >
-                      <svg
+                      <IconChevronDown
                         v-if="!isCollapsed"
-                        class="h-5 w-5 transition-transform duration-200"
+                        class="transition-transform duration-200"
                         :class="[(item.id === 'system-settings' ? isSystemSettingsExpanded : isTaskManagementExpanded) ? 'transform rotate-180' : '', darkMode ? 'text-gray-400' : 'text-gray-500']"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getIconPath('chevron-down')" />
-                      </svg>
+                        aria-hidden="true"
+                      />
                     </transition>
                   </button>
 
@@ -235,20 +214,15 @@
                         'group flex items-center px-3 py-2 text-sm font-medium rounded-md',
                       ]"
                     >
-                      <svg
-                        class="flex-shrink-0 h-5 w-5"
+                      <component
+                        :is="getMenuIconComponent(child.icon)"
+                        class="flex-shrink-0"
                         :class="[
                           isCollapsed ? 'mx-auto' : 'mr-3',
                           $route.name === child.routeName ? 'text-primary-500' : darkMode ? 'text-gray-500 group-hover:text-gray-400' : 'text-gray-400 group-hover:text-gray-500',
                         ]"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
                         aria-hidden="true"
-                      >
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getIconPath(child.icon)" />
-                      </svg>
+                      />
                       <transition
                         name="fade-slide"
                         enter-active-class="transition-all duration-300 delay-100"
@@ -279,17 +253,12 @@
                 ]"
                 :title="isCollapsed ? logoutText : ''"
               >
-                <svg
-                  class="flex-shrink-0 h-6 w-6"
+                <IconLogout
+                  size="lg"
+                  class="flex-shrink-0"
                   :class="[isCollapsed ? 'mx-auto' : 'mr-3', 'text-gray-400']"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
                   aria-hidden="true"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getIconPath('logout')" />
-                </svg>
+                />
                 <transition
                   name="fade-slide"
                   enter-active-class="transition-all duration-300 delay-100"
@@ -314,17 +283,10 @@
                   :class="[
                     darkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-400 hover:text-gray-500',
                     'inline-flex items-center justify-center p-2 rounded-md transition-colors duration-200',
-                  ]"
-                  title="Document"
-                >
-                  <svg class="h-7 w-7" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                    />
-                  </svg>
+                ]"
+                title="Document"
+              >
+                  <IconBookOpen class="h-7 w-7" aria-hidden="true" />
                 </a>
               </div>
             </div>
@@ -367,17 +329,7 @@
               class="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
             >
               <span class="sr-only">{{ t("admin.sidebar.closeMenu") }}</span>
-              <svg
-                class="h-6 w-6"
-                :class="darkMode ? 'text-white' : 'text-gray-600'"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                aria-hidden="true"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <IconClose size="lg" :class="darkMode ? 'text-white' : 'text-gray-600'" aria-hidden="true" />
             </button>
           </div>
 
@@ -403,17 +355,13 @@
                   ]"
                   @click="$emit('close-mobile-sidebar')"
                 >
-                  <svg
-                    class="mr-3 flex-shrink-0 h-6 w-6"
+                  <component
+                    :is="getMenuIconComponent(item.icon)"
+                    size="lg"
+                    class="mr-3 flex-shrink-0"
                     :class="$route.name === item.routeName ? 'text-primary-500' : darkMode ? 'text-gray-400 group-hover:text-gray-300' : 'text-gray-400 group-hover:text-gray-500'"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
                     aria-hidden="true"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getIconPath(item.icon)" />
-                  </svg>
+                  />
                   {{ item.name }}
                 </router-link>
 
@@ -428,30 +376,21 @@
                     ]"
                   >
                     <div class="flex items-center">
-                      <svg
-                        class="mr-3 flex-shrink-0 h-6 w-6"
+                      <component
+                        :is="getMenuIconComponent(item.icon)"
+                        size="lg"
+                        class="mr-3 flex-shrink-0"
                         :class="darkMode ? 'text-gray-400 group-hover:text-gray-300' : 'text-gray-400 group-hover:text-gray-500'"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
                         aria-hidden="true"
-                      >
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getIconPath(item.icon)" />
-                      </svg>
+                      />
                       {{ item.name }}
                     </div>
                     <!-- 展开/收起箭头 -->
-                    <svg
-                      class="h-5 w-5 transition-transform duration-200"
+                    <IconChevronDown
+                      class="transition-transform duration-200"
                       :class="[(item.id === 'system-settings' ? isSystemSettingsExpanded : isTaskManagementExpanded) ? 'transform rotate-180' : '', darkMode ? 'text-gray-400' : 'text-gray-500']"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getIconPath('chevron-down')" />
-                    </svg>
+                      aria-hidden="true"
+                    />
                   </a>
 
                   <!-- 子菜单项 -->
@@ -472,19 +411,14 @@
                       ]"
                       @click="$emit('close-mobile-sidebar')"
                     >
-                      <svg
-                        class="mr-3 flex-shrink-0 h-5 w-5"
+                      <component
+                        :is="getMenuIconComponent(child.icon)"
+                        class="mr-3 flex-shrink-0"
                         :class="
                           $route.name === child.routeName ? 'text-primary-500' : darkMode ? 'text-gray-500 group-hover:text-gray-400' : 'text-gray-400 group-hover:text-gray-500'
                         "
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
                         aria-hidden="true"
-                      >
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getIconPath(child.icon)" />
-                      </svg>
+                      />
                       {{ child.name }}
                     </router-link>
                   </div>
@@ -500,9 +434,7 @@
                     'group flex items-center px-3 py-2.5 text-sm font-medium rounded-md cursor-pointer',
                   ]"
                 >
-                  <svg class="mr-3 flex-shrink-0 h-6 w-6 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getIconPath('logout')" />
-                  </svg>
+                  <IconLogout size="lg" class="mr-3 flex-shrink-0 text-gray-400" aria-hidden="true" />
                   {{ logoutText }}
                 </a>
 
@@ -519,14 +451,7 @@
                     title="Document"
                     @click="$emit('close-mobile-sidebar')"
                   >
-                    <svg class="h-7 w-7" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                      />
-                    </svg>
+                    <IconBookOpen class="h-7 w-7" aria-hidden="true" />
                   </a>
                 </div>
               </div>
@@ -543,6 +468,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useSiteConfigStore } from "@/stores/siteConfigStore.js";
+import { IconBellAlert, IconBookOpen, IconChartBar, IconChevronDown, IconChevronLeft, IconChevronRight, IconCircleStack, IconCloud, IconClose, IconDocumentText, IconEye, IconFolder, IconGlobeAlt, IconHome, IconInformationCircle, IconKey, IconLink, IconLogout, IconMenu, IconServerStack, IconSettings, IconTaskList, IconUser, IconList } from "@/components/icons";
 
 // 使用i18n和站点配置Store
 const { t } = useI18n();
@@ -602,6 +528,33 @@ const saveCollapseState = (collapsed) => {
 
 // 常量
 const DOC_URL = "https://doc.cloudpaste.qzz.io/";
+
+// 统一侧边栏图标：从图标名映射到统一出口 @/components/icons 的组件
+const menuIconMap = {
+  'chart-bar': IconChartBar,
+  'document-text': IconDocumentText,
+  folder: IconFolder,
+  cloud: IconCloud,
+  server: IconServerStack,
+  'information-circle': IconInformationCircle,
+  'clipboard-list': IconTaskList,
+  'bell-alert': IconBellAlert,
+  'list-bullet': IconList,
+  key: IconKey,
+  user: IconUser,
+  'circle-stack': IconCircleStack,
+  cog: IconSettings,
+  globe: IconGlobeAlt,
+  eye: IconEye,
+  'cloud-webdav': IconLink,
+  home: IconHome,
+  logout: IconLogout,
+  'chevron-down': IconChevronDown,
+};
+
+const getMenuIconComponent = (iconName) => {
+  return menuIconMap[iconName] || IconMenu;
+};
 
 // 根据登录类型和权限计算可见的菜单项
 const visibleMenuItems = computed(() => {

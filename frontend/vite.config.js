@@ -27,9 +27,7 @@ export default defineConfig(({ command, mode }) => {
   return {
     base: '/',
     define: {
-      // 注入版本号到应用中
       __APP_VERSION__: JSON.stringify(APP_VERSION),
-      // 注入环境变量到应用中
       __APP_ENV__: JSON.stringify(env.VITE_APP_ENV || "production"),
       __BACKEND_URL__: JSON.stringify(env.VITE_BACKEND_URL || ""),
     },
@@ -40,7 +38,7 @@ export default defineConfig(({ command, mode }) => {
         resolvers: [
           IconsResolver({
             prefix: "i",
-            enabledCollections: ["mdi"],
+            enabledCollections: ["mdi", "heroicons-outline", "heroicons-solid"],
           }),
         ],
       }),
@@ -75,7 +73,7 @@ export default defineConfig(({ command, mode }) => {
                 cacheName: "app-static-resources",
                 expiration: {
                   maxEntries: 1000,
-                  maxAgeSeconds: 7 * 24 * 60 * 60, // 7天（依赖Vite版本控制）
+                  maxAgeSeconds: 7 * 24 * 60 * 60,
                 },
                 cacheableResponse: {
                   statuses: [0, 200],
@@ -91,7 +89,7 @@ export default defineConfig(({ command, mode }) => {
                 cacheName: "fonts",
                 expiration: {
                   maxEntries: 50,
-                  maxAgeSeconds: 30 * 24 * 60 * 60, // 30天（字体变化频率低）
+                  maxAgeSeconds: 30 * 24 * 60 * 60, 
                 },
                 cacheableResponse: {
                   statuses: [0, 200],
@@ -116,7 +114,7 @@ export default defineConfig(({ command, mode }) => {
                 cacheName: "external-cdn-resources",
                 expiration: {
                   maxEntries: 100,
-                  maxAgeSeconds: 30 * 24 * 60 * 60, // 30天
+                  maxAgeSeconds: 30 * 24 * 60 * 60, 
                 },
                 cacheableResponse: {
                   statuses: [0, 200],
@@ -135,7 +133,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 图廊图片 - StaleWhileRevalidate（图片适合后台更新）
+            // 图廊图片 - StaleWhileRevalidate
             {
               urlPattern: ({ request, url }) =>
                 request.destination === "image" && (url.pathname.includes("/api/") || url.searchParams.has("X-Amz-Algorithm") || url.hostname !== self.location.hostname),
@@ -215,7 +213,7 @@ export default defineConfig(({ command, mode }) => {
                 cacheName: "system-api",
                 expiration: {
                   maxEntries: 10,
-                  maxAgeSeconds: 30 * 60, // 30分钟
+                  maxAgeSeconds: 30 * 60,
                 },
                 networkTimeoutSeconds: 3,
                 cacheableResponse: {
@@ -242,7 +240,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 文本分享API - NetworkOnly（涉及访问计数，必须实时）
+            // 文本分享API - NetworkOnly
             {
               urlPattern: /^.*\/api\/(pastes|paste|raw)\/.*$/,
               handler: "NetworkOnly",
@@ -277,7 +275,7 @@ export default defineConfig(({ command, mode }) => {
                 cacheName: "public-api",
                 expiration: {
                   maxEntries: 50,
-                  maxAgeSeconds: 60 * 60, // 1小时（公共内容相对稳定）
+                  maxAgeSeconds: 60 * 60,
                 },
                 cacheableResponse: {
                   statuses: [0, 200],

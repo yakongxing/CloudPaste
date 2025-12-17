@@ -13,9 +13,7 @@
     <!-- 错误状态 -->
     <div v-else-if="error" class="flex-1 flex items-center justify-center">
       <div class="text-center">
-        <svg class="mx-auto h-12 w-12 mb-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
+        <IconError size="3xl" class="mx-auto mb-4 text-red-500" aria-hidden="true" />
         <h3 class="text-lg font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-900'">
           {{ t("search.status.failed") }}
         </h3>
@@ -69,14 +67,7 @@
                 :class="darkMode ? 'text-gray-400 hover:text-green-400 hover:bg-gray-700' : 'text-gray-500 hover:text-green-600 hover:bg-gray-100'"
                 :title="t('search.results.item.copyPath')"
               >
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                  />
-                </svg>
+                <IconCopy size="sm" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -111,9 +102,7 @@
     <!-- 空状态 - 未开始搜索 -->
     <div v-else-if="!hasPerformedSearch && !hasSearchResults && !loading" class="py-12">
       <div class="text-center">
-        <svg class="mx-auto h-10 w-10 mb-3" :class="darkMode ? 'text-gray-500' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
+        <IconSearch size="2xl" class="mx-auto mb-3" :class="darkMode ? 'text-gray-500' : 'text-gray-400'" aria-hidden="true" />
         <h3 class="text-base font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-900'">
           {{ t("search.status.idle") }}
         </h3>
@@ -129,14 +118,10 @@
         <!-- 更直观的无结果图标 - 空文件夹 + 搜索 -->
         <div class="relative mx-auto h-16 w-16 mb-6">
           <!-- 空文件夹 -->
-          <svg class="h-16 w-16" :class="darkMode ? 'text-gray-500' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-          </svg>
+          <IconFolderOpen size="4xl" :class="darkMode ? 'text-gray-500' : 'text-gray-400'" aria-hidden="true" />
           <!-- 小搜索图标叠加 -->
           <div class="absolute -bottom-1 -right-1 bg-white dark:bg-gray-800 rounded-full p-1">
-            <svg class="h-4 w-4" :class="darkMode ? 'text-gray-400' : 'text-gray-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            <IconSearch size="sm" :class="darkMode ? 'text-gray-400' : 'text-gray-500'" aria-hidden="true" />
           </div>
         </div>
 
@@ -154,6 +139,7 @@
 <script setup>
 import { reactive } from "vue";
 import { useI18n } from "vue-i18n";
+import { IconCopy, IconError, IconFolderOpen, IconSearch } from "@/components/icons";
 import { getFileIcon as getFileIconUtil } from "@/utils/fileTypeIcons.js";
 import { formatFileSize } from "@/utils/fileUtils.js";
 import { formatDateTime } from "@/utils/timeUtils.js";

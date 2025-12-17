@@ -38,25 +38,8 @@
             class="inline-flex items-center justify-center px-2 py-1.5 sm:px-3 sm:py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-all duration-200 ease-in-out"
             :class="isDarkMode ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'"
           >
-            <svg
-              v-if="!isLoading"
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-4 w-4 sm:mr-1.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
-            <svg v-else class="animate-spin h-4 w-4 sm:mr-1.5" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
+            <IconRefresh v-if="!isLoading" size="sm" class="sm:mr-1.5" />
+            <IconRefresh v-else size="sm" class="animate-spin sm:mr-1.5" />
             <span class="hidden sm:inline">{{ $t('admin.tasks.actions.refresh') }}</span>
           </button>
 
@@ -67,16 +50,7 @@
             class="inline-flex items-center justify-center px-2 py-1.5 sm:px-3 sm:py-2 border text-sm font-medium rounded-md shadow-sm transition-all duration-200 ease-in-out"
             :class="isDarkMode ? 'border-gray-600 bg-gray-700 hover:bg-gray-600 text-gray-200' : 'border-gray-300 bg-white hover:bg-gray-50 text-gray-700'"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-4 w-4 sm:mr-1.5 transition-transform duration-200"
-              :class="{ 'rotate-180': isAllExpanded }"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
+            <IconChevronDown size="sm" class="sm:mr-1.5 transition-transform duration-200" :class="{ 'rotate-180': isAllExpanded }" />
             <span class="hidden sm:inline">{{ isAllExpanded ? $t('admin.tasks.actions.collapseAll') : $t('admin.tasks.actions.expandAll') }}</span>
           </button>
 
@@ -94,9 +68,7 @@
                 : 'bg-red-500 hover:bg-red-600 text-white',
             ]"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
+            <IconDelete size="sm" class="sm:mr-1.5" />
             <span class="hidden sm:inline">{{ $t('admin.tasks.actions.delete') }}{{ selectedTasks.length ? ` (${selectedTasks.length})` : '' }}</span>
           </button>
         </div>
@@ -138,10 +110,7 @@
     <div class="overflow-hidden bg-white dark:bg-gray-800 shadow-md rounded-lg">
       <!-- 加载状态 -->
       <div v-if="isLoading && tasks.length === 0" class="text-center py-12">
-        <svg class="animate-spin h-10 w-10 mx-auto text-primary-600" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
+        <IconRefresh size="2xl" class="animate-spin mx-auto text-primary-600" />
         <p class="mt-3 text-sm" :class="isDarkMode ? 'text-gray-400' : 'text-gray-600'">{{ $t('admin.tasks.loading') }}</p>
       </div>
 
@@ -154,9 +123,7 @@
 
       <!-- 空状态 -->
       <div v-else-if="filteredTasks.length === 0" class="text-center py-12">
-        <svg class="mx-auto h-10 w-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-        </svg>
+        <IconDocumentText size="2xl" class="mx-auto text-gray-400" />
         <h3 class="mt-2 text-sm font-medium" :class="isDarkMode ? 'text-white' : 'text-gray-900'">{{ $t('admin.tasks.empty.title') }}</h3>
         <p class="mt-1 text-sm" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">{{ $t('admin.tasks.empty.description') }}</p>
       </div>
@@ -176,22 +143,11 @@
           <div class="flex items-start gap-3 p-3">
             <!-- 状态图标 -->
             <div class="flex-shrink-0 w-5 h-5">
-              <svg v-if="task.status === 'completed'" class="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-              </svg>
-              <svg v-else-if="task.status === 'failed'" class="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              <svg v-else-if="task.status === 'partial'" class="w-5 h-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <svg v-else-if="task.status === 'cancelled'" class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-              </svg>
-              <svg v-else class="w-5 h-5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+              <IconCheck v-if="task.status === 'completed'" size="md" class="text-green-500" />
+              <IconXCircle v-else-if="task.status === 'failed'" size="md" class="text-red-500" />
+              <IconExclamation v-else-if="task.status === 'partial'" size="md" class="text-yellow-500" />
+              <IconXCircle v-else-if="task.status === 'cancelled'" size="md" class="text-gray-400" />
+              <IconRefresh v-else size="md" class="text-blue-500 animate-spin" />
             </div>
 
             <!-- 任务名 + 状态徽章 -->
@@ -277,17 +233,13 @@
               class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium"
               :class="getCreatorBadgeClass(task.userId, task.keyName)"
             >
-              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
-              </svg>
+              <IconUser size="xs" />
               {{ getCreatorText(task.userId, task.keyName) }}
             </span>
 
             <!-- 相对时间 -->
             <span class="flex items-center gap-1">
-              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
-              </svg>
+              <IconClock size="xs" />
               {{ task.relativeTime }}
             </span>
           </div>
@@ -306,15 +258,7 @@
                 : 'bg-gray-100 hover:bg-gray-200 text-gray-700'"
             >
               <span class="hidden sm:inline">{{ expandedRows.includes(task.id) ? '收起详情' : '展开详情' }}</span>
-              <svg
-                class="w-4 h-4 transition-transform duration-200"
-                :class="{ 'rotate-180': expandedRows.includes(task.id) }"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-              </svg>
+              <IconChevronDown size="sm" class="transition-transform duration-200" :class="{ 'rotate-180': expandedRows.includes(task.id) }" />
             </button>
 
             <!-- 取消按钮 -->
@@ -325,9 +269,7 @@
               :class="isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-orange-50'"
               title="取消任务"
             >
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <IconClose size="md" />
             </button>
 
             <!-- 删除按钮 -->
@@ -338,9 +280,7 @@
               :class="isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-red-50'"
               title="删除任务"
             >
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
+              <IconDelete size="md" />
             </button>
           </div>
 
@@ -368,9 +308,7 @@
                     ? 'bg-orange-600 hover:bg-orange-700 text-white'
                     : 'bg-orange-500 hover:bg-orange-600 text-white'"
                 >
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
+                  <IconRefresh size="xs" />
                   重试 ({{ task.stats.failed }})
                 </button>
               </div>
@@ -394,20 +332,13 @@
                   <!-- 状态图标 -->
                   <span class="flex-shrink-0">
                     <span v-if="item.status === 'success'" class="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
-                      <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-                      </svg>
+                      <IconCheck size="xs" class="text-white" />
                     </span>
                     <span v-else-if="item.status === 'processing'" class="w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
-                      <svg class="w-2.5 h-2.5 text-white animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                      </svg>
+                      <IconRefresh size="xs" class="text-white animate-spin" />
                     </span>
                     <span v-else-if="item.status === 'failed'" class="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center">
-                      <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
+                      <IconClose size="xs" class="text-white" />
                     </span>
                     <span v-else class="w-4 h-4 rounded-full border-2 flex items-center justify-center" :class="isDarkMode ? 'border-gray-500 bg-gray-700' : 'border-gray-300 bg-gray-100'">
                       <span class="w-1.5 h-1.5 rounded-full" :class="isDarkMode ? 'bg-gray-500' : 'bg-gray-400'"></span>
@@ -454,9 +385,7 @@
                       : 'hover:bg-orange-50 text-orange-500'"
                     title="重试此文件"
                   >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
+                    <IconRefresh size="sm" />
                   </button>
                 </div>
 
@@ -471,9 +400,7 @@
                       ? 'bg-red-900/30 text-red-300'
                       : 'bg-red-50 text-red-600'"
                   >
-                    <svg class="w-3 h-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
+                    <IconExclamation size="xs" class="flex-shrink-0 mt-0.5" />
                     <span class="break-words">{{ item.error }}</span>
                   </div>
                 </div>
@@ -547,9 +474,7 @@
                   <div class="flex items-center space-x-2">
                     <div class="flex-shrink-0">
                       <div class="w-8 h-8 rounded bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-                        <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
+                        <IconCopy size="sm" class="text-primary-600 dark:text-primary-400" />
                       </div>
                     </div>
                     <div class="min-w-0 flex-1">
@@ -650,9 +575,7 @@
                       class="p-1.5 sm:p-2 rounded-full transition-colors text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20"
                       :title="$t('admin.tasks.actions.cancel')"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
+                      <IconClose size="md" class="sm:w-5 sm:h-5" />
                     </button>
 
                     <!-- 展开按钮 -->
@@ -662,16 +585,7 @@
                       :class="isDarkMode ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'"
                       :title="expandedRows.includes(task.id) ? '收起' : '展开'"
                     >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        class="h-5 w-5 transition-transform duration-200"
-                        :class="{ 'rotate-180': expandedRows.includes(task.id) }"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                      </svg>
+                      <IconChevronDown size="md" class="transition-transform duration-200" :class="{ 'rotate-180': expandedRows.includes(task.id) }" />
                     </button>
 
                     <!-- 删除按钮 -->
@@ -681,9 +595,7 @@
                       class="p-1.5 sm:p-2 rounded-full transition-colors text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
                       :title="$t('admin.tasks.actions.delete')"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
+                      <IconDelete size="md" class="sm:w-5 sm:h-5" />
                     </button>
                   </div>
                 </td>
@@ -706,9 +618,7 @@
                           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
                           :class="isDarkMode ? 'bg-orange-600 hover:bg-orange-700 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'"
                         >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
+                          <IconRefresh size="sm" />
                           {{ $t('admin.tasks.actions.retryAllFailed') }} ({{ task.stats.failed }})
                         </button>
                       </div>
@@ -733,34 +643,23 @@
                             <span class="flex-shrink-0">
                               <!-- 成功 -->
                               <span v-if="item.status === 'success'" class="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shadow-sm">
-                                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-                                </svg>
+                                <IconCheck size="xs" class="text-white" />
                               </span>
                               <!-- 处理中 -->
                               <span v-else-if="item.status === 'processing'" class="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center shadow-sm">
-                                <svg class="w-3 h-3 text-white animate-spin" fill="none" viewBox="0 0 24 24">
-                                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                                </svg>
+                                <IconRefresh size="xs" class="text-white animate-spin" />
                               </span>
                               <!-- 重试中 -->
                               <span v-else-if="item.status === 'retrying'" class="w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center shadow-sm animate-pulse">
-                                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                </svg>
+                                <IconRefresh size="xs" class="text-white" />
                               </span>
                               <!-- 失败 -->
                               <span v-else-if="item.status === 'failed'" class="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shadow-sm">
-                                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
+                                <IconClose size="xs" class="text-white" />
                               </span>
                               <!-- 跳过 -->
                               <span v-else-if="item.status === 'skipped'" class="w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center shadow-sm">
-                                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M20 12H4" />
-                                </svg>
+                                <span class="text-white text-xs leading-none">—</span>
                               </span>
                               <!-- 等待中 -->
                               <span v-else class="w-5 h-5 rounded-full border-2 flex items-center justify-center" :class="isDarkMode ? 'border-gray-500 bg-gray-700' : 'border-gray-300 bg-gray-100'">
@@ -789,9 +688,7 @@
 
                             <!-- 箭头 + 目标路径 -->
                             <span class="flex-1 min-w-0 flex items-center gap-1 text-gray-500 dark:text-gray-400">
-                              <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                              </svg>
+                              <IconChevronRight size="xs" class="flex-shrink-0" />
                               <span class="truncate font-mono text-xs" :title="item.targetPath">
                                 {{ item.targetPath || '...' }}
                               </span>
@@ -818,9 +715,7 @@
                               :class="isDarkMode ? 'hover:bg-gray-700 text-orange-400 hover:text-orange-300' : 'hover:bg-orange-50 text-orange-500 hover:text-orange-600'"
                               :title="$t('admin.tasks.actions.retryFile')"
                             >
-                              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>
+                              <IconRefresh size="sm" />
                             </button>
                           </div>
 
@@ -833,9 +728,7 @@
                               class="flex items-start gap-1.5 px-2 py-1.5 rounded text-xs"
                               :class="isDarkMode ? 'bg-red-900/30 text-red-300' : 'bg-red-50 text-red-600'"
                             >
-                              <svg class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              </svg>
+                              <IconExclamation size="sm" class="flex-shrink-0 mt-0.5" />
                               <span>{{ item.error }}</span>
                             </div>
                           </div>
@@ -918,6 +811,7 @@ import { useThemeMode } from '@/composables/core/useThemeMode.js';
 import { useAdminBase } from '@/composables/admin-management/useAdminBase.js';
 import { useCreatorBadge } from '@/composables/admin-management/useCreatorBadge.js';
 import { useAuthStore } from '@/stores/authStore.js';
+import { IconCheck, IconChevronDown, IconChevronRight, IconClock, IconClose, IconCopy, IconDelete, IconDocumentText, IconExclamation, IconRefresh, IconTaskList, IconUser, IconXCircle } from '@/components/icons';
 
 const { t } = useI18n();
 const { showSuccess, showError, showWarning } = useGlobalMessage();

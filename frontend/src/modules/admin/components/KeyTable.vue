@@ -8,6 +8,7 @@ import { useConfirmDialog } from "@/composables/core/useConfirmDialog.js";
 import AdminTable from "@/components/common/AdminTable.vue";
 import ConfirmDialog from "@/components/common/dialogs/ConfirmDialog.vue";
 import { formatDateTime } from "@/utils/timeUtils.js";
+import { IconKey } from "@/components/icons";
 
 // i18n
 const { t } = useI18n();
@@ -608,14 +609,7 @@ defineExpose({
 
     <!-- 空状态 -->
     <div v-else-if="apiKeys.length === 0" class="text-center p-12 rounded-lg border-2 border-dashed" :class="darkMode ? 'border-gray-700 text-gray-400 bg-gray-800/30' : 'border-gray-200 text-gray-500 bg-gray-50'">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="1.5"
-          d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-        />
-      </svg>
+      <IconKey size="4xl" class="mx-auto mb-4 opacity-40" aria-hidden="true" />
       <p class="text-lg font-semibold mb-2">{{ $t("admin.keyManagement.noKeysTitle") }}</p>
       <p>{{ $t("admin.keyManagement.noKeysDescription") }}</p>
     </div>
