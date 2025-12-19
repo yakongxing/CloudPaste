@@ -43,9 +43,9 @@
     "exifreader": "^4.33.1",
     "file-saver": "^2.0.5",
     "hls.js": "^1.6.7",
+    "leaflet": "^1.9.4",
     "libarchive.js": "^2.0.2",
     "libheif-js": "^1.19.8",
-    "leaflet": "^1.9.4",
     "mime-db": "^1.54.0",
     "mpegts.js": "^1.8.0",
     "nprogress": "^0.2.0",
@@ -63,9 +63,9 @@
     "vue-router": "^4.5.1"
   },
   "devDependencies": {
-    "@iconify-json/mdi": "^1.2.3",
     "@iconify-json/heroicons-outline": "^1.2.1",
     "@iconify-json/heroicons-solid": "^1.2.1",
+    "@iconify-json/mdi": "^1.2.3",
     "@originjs/vite-plugin-commonjs": "^1.0.3",
     "@vitejs/plugin-vue": "^5.2.4",
     "eslint": "^9.0.0",

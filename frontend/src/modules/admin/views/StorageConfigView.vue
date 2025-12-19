@@ -9,7 +9,7 @@ import { formatDateTimeWithSeconds } from "@/utils/timeUtils.js";
 import { useThemeMode } from "@/composables/core/useThemeMode.js";
 import { useConfirmDialog } from "@/composables/core/useConfirmDialog.js";
 import { useStorageTypePresentation } from "@/modules/admin/storage/useStorageTypePresentation.js";
-import IconBase from "@/components/icons/IconBase.vue";
+import { useStorageTypeIcon } from "@/composables/core/useStorageTypeIcon.js";
 import { IconArchive, IconCalendar, IconCheck, IconCheckCircle, IconChevronRight, IconClose, IconCloud, IconDelete, IconError, IconFolderPlus, IconLink, IconRefresh, IconRename, IconXCircle } from "@/components/icons";
 
 const { isDarkMode: darkMode } = useThemeMode();
@@ -60,9 +60,11 @@ const {
   handleSetDefaultConfig,
   testConnection,
   showTestDetailsModal,
-  getProviderIcon,
   STORAGE_TYPE_UNKNOWN,
 } = useStorageConfigManagement({ confirmFn });
+
+// 存储类型图标
+const { getStorageTypeIcon, getStorageTypeIconClass } = useStorageTypeIcon();
 
 // 存储类型展示/样式 helper（统一从 /api/storage-types 加载）
 const { storageTypesMeta, getTypeMeta, getTypeLabel, getBadgeClass, ensureLoaded } = useStorageTypePresentation();
@@ -263,14 +265,10 @@ onMounted(async () => {
             >
               <div class="px-2 py-2 sm:px-3 sm:py-2.5 flex flex-wrap justify-between items-center gap-2 border-b" :class="darkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'">
                 <div class="flex items-center gap-1 sm:gap-2 flex-wrap min-w-0">
-                  <IconBase :class="['h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0', getProviderIcon(config.storage_type, config.provider_type).color]">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      :d="getProviderIcon(config.storage_type, config.provider_type).path"
-                    />
-                  </IconBase>
+                  <component
+                    :is="getStorageTypeIcon(config.storage_type)"
+                    :class="['h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0', getStorageTypeIconClass(config.storage_type, darkMode)]"
+                  />
                   <h3 class="font-medium text-sm" :class="[darkMode ? 'text-gray-100' : 'text-gray-900', config.is_default ? 'font-semibold' : '']">
                     {{ config.name }}
                   </h3>

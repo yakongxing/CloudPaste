@@ -94,15 +94,15 @@ export function createNodeStreamDescriptor({ openStream, openRangeStream, size, 
  * @returns {import("./types.js").StorageStreamDescriptor & { supportsRange?: boolean }}
  */
 export function createHttpStreamDescriptor({
-                                             fetchResponse,
-                                             fetchRangeResponse,
-                                             fetchHeadResponse,
-                                             size = null,
-                                             contentType = null,
-                                             etag = null,
-                                             lastModified = null,
-                                             supportsRange,
-                                           }) {
+  fetchResponse,
+  fetchRangeResponse,
+  fetchHeadResponse,
+  size = null,
+  contentType = null,
+  etag = null,
+  lastModified = null,
+  supportsRange,
+}) {
   let currentSize = typeof size === "number" ? size : null;
 
   const RETRYABLE_HTTP_STATUS = new Set([429, 500, 502, 503, 504]);

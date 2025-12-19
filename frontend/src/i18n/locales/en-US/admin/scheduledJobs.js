@@ -220,7 +220,7 @@ export default {
       sourcePath: "Source Path",
       targetPath: "Target Path",
       sourcePathHint: "Can be a file or folder path",
-      targetPathHint: "Must be a folder path",
+      targetPathHint: "Can be a folder path (auto-append source filename) or a full file path",
       quickInputPlaceholder: "Enter path and press Enter...",
       copyPath: "Copy Path",
       collapse: "Collapse",

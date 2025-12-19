@@ -718,12 +718,12 @@ const pasteColumns = computed(() => [
 // 列样式配置
 const pasteColumnClasses = computed(() => ({
   slug: "",
-  remark: "hidden sm:table-cell",
-  created_at: "hidden md:table-cell",
-  expires_at: "hidden lg:table-cell",
-  is_public: "hidden sm:table-cell",
-  remaining_views: "",
-  created_by: "hidden lg:table-cell",
-  actions: "",
+  remark: "hidden sm:table-cell text-center",
+  created_at: "hidden md:table-cell text-center",
+  expires_at: "hidden lg:table-cell text-center",
+  is_public: "hidden sm:table-cell text-center",
+  remaining_views: "text-center",
+  created_by: "hidden lg:table-cell text-center",
+  actions: "text-center",
 }));
 </script>

@@ -2,14 +2,16 @@ import crypto from "crypto";
 import { DbTables } from "../constants/index.js";
 import { ValidationError, RepositoryError } from "../http/errors.js";
 import { StorageConfigUtils } from "../storage/utils/StorageConfigUtils.js";
+import { createDbRuntime } from "../db/runtime.js";
 
 /**
  * 数据备份与还原服务
  * 提供数据库的备份和还原功能
  */
 export class BackupService {
-  constructor(db) {
+  constructor(db, env = {}) {
     this.db = db;
+    this.dialect = createDbRuntime({ db, env }).dialect;
 
     // 模块与数据表的映射关系
     this.moduleTableMapping = {
@@ -37,6 +39,62 @@ export class BackupService {
   }
 
   /**
+   * FS 搜索索引表属于派生数据：不参与备份/恢复事实来源，默认通过重建恢复
+   * @returns {Set<string>}
+   */
+  getDerivedIndexTables() {
+    return new Set([
+      DbTables.FS_SEARCH_INDEX_ENTRIES,
+      DbTables.FS_SEARCH_INDEX_STATE,
+      DbTables.FS_SEARCH_INDEX_DIRTY,
+      DbTables.FS_SEARCH_INDEX_FTS,
+    ].filter(Boolean));
+  }
+
+  /**
+   * 还原后强制将 FS 搜索索引标记为“需重建”
+   * - D1 的 FTS5 虚表不适合 export/import；索引属于派生数据，必须可重建
+   */
+  async markFsSearchIndexNotReadyAfterRestore() {
+    const derived = this.getDerivedIndexTables();
+    if (!derived.size) return;
+
+    const statements = [];
+    for (const tableName of derived) {
+      statements.push(this.db.prepare(`DELETE FROM ${tableName}`));
+    }
+
+    try {
+      await this.db.batch(statements);
+    } catch (error) {
+      // 旧 schema 或未创建索引表时可能失败；保持“尽力而为”
+      console.warn(`[BackupService] 清理 FS 搜索索引表失败（可忽略）: ${error.message}`);
+    }
+  }
+
+  async getSchemaVersionForBackup() {
+    try {
+      const resp = await this.db.prepare(`SELECT id FROM schema_migrations`).all();
+      const rows = resp?.results || [];
+      const ids = rows.map((r) => r?.id).filter(Boolean);
+
+      let maxVersion = null;
+      for (const id of ids) {
+        const match = String(id).match(/^app-v(\d{2})$/);
+        if (!match) continue;
+        const parsed = Number.parseInt(match[1], 10);
+        if (!Number.isFinite(parsed)) continue;
+        maxVersion = maxVersion === null ? parsed : Math.max(maxVersion, parsed);
+      }
+
+      return maxVersion === null ? null : String(maxVersion);
+    } catch (error) {
+      console.warn(`[BackupService] 读取 schema_migrations 失败: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
    * 创建备份
    * @param {Object} options - 备份选项
    * @returns {Object} 备份数据
@@ -50,7 +108,8 @@ export class BackupService {
 
     if (backup_type === "full") {
       // 完整备份 - 所有表
-      tables = Object.values(DbTables);
+      const derived = this.getDerivedIndexTables();
+      tables = Object.values(DbTables).filter((t) => !derived.has(t));
     } else if (backup_type === "modules") {
       // 检查并自动包含依赖模块
       dependencies = this.getModuleDependencies(selected_modules);
@@ -68,18 +127,7 @@ export class BackupService {
     // 导出数据
     const data = await this.exportTables(tables);
 
-    // 读取当前 schema 版本（如果存在），用于在元数据中记录备份来源的结构版本
-    let schemaVersion = null;
-    try {
-      const row = await this.db
-        .prepare(`SELECT value FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`)
-        .bind("schema_version")
-        .first();
-      schemaVersion = row?.value ?? null;
-    } catch (error) {
-      console.warn(`[BackupService] 读取 schema_version 失败: ${error.message}`);
-      schemaVersion = null;
-    }
+    const schemaVersion = await this.getSchemaVersionForBackup();
 
     // 生成元数据
     const metadata = {
@@ -218,15 +266,15 @@ export class BackupService {
 
             const fields = Object.keys(processedRecord);
             const values = Object.values(processedRecord);
-            const placeholders = fields.map(() => "?").join(", ");
 
             let sql;
             if (mode === "overwrite") {
               // 覆盖模式使用INSERT（表已清空）
+              const placeholders = fields.map(() => "?").join(", ");
               sql = `INSERT INTO ${tableName} (${fields.join(", ")}) VALUES (${placeholders})`;
             } else {
-              // 合并模式使用INSERT OR IGNORE（避免冲突）
-              sql = `INSERT OR IGNORE INTO ${tableName} (${fields.join(", ")}) VALUES (${placeholders})`;
+              // 合并模式使用“忽略冲突插入”（不同数据库方言不同）
+              sql = this.dialect.buildInsertIgnoreSql({ table: tableName, columns: fields });
             }
 
             const statementIndex = statements.length;
@@ -249,6 +297,9 @@ export class BackupService {
 
       // 分析batch执行结果，计算实际的成功/失败统计
       const results = this.analyzeBatchResults(batchResults, statementTableMap, expectedResults);
+
+      // 还原后：索引类派生数据一律视为无效，强制清空并要求重建
+      await this.markFsSearchIndexNotReadyAfterRestore();
 
       return {
         restored_tables: Object.keys(results),

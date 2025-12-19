@@ -198,7 +198,7 @@ const getFileIcon = (item) => {
   return getFileIconUtil(
     {
       name: item.name,
-      type: item.type, 
+      type: item.type,
       isDirectory: item.isDirectory || false,
       isMount: false,
     },

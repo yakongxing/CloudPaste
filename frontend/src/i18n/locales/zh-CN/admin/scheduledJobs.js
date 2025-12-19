@@ -219,7 +219,7 @@ export default {
       sourcePath: "源路径",
       targetPath: "目标路径",
       sourcePathHint: "可以是文件或文件夹路径",
-      targetPathHint: "必须是文件夹路径",
+      targetPathHint: "可以是文件夹路径（自动拼接源文件名），也可手动重命名文件路径",
       quickInputPlaceholder: "输入路径后按回车...",
       copyPath: "复制路径",
       collapse: "收起",

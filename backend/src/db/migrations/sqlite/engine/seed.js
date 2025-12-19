@@ -1,0 +1,423 @@
+import crypto from "crypto";
+import { DbTables } from "../../../../constants/index.js";
+
+/**
+ * SQLite/D1 系统设置与默认数据（engine）
+ *
+ */
+
+export async function initDefaultSettings(db) {
+  console.log("初始化系统默认设置...");
+
+  // 为 cleanup_upload_sessions 任务写入默认调度配置（若不存在）
+  const cleanupIntervalSec = 24 * 60 * 60;
+  const firstCleanupNextRunIso = new Date(Date.now() + cleanupIntervalSec * 1000).toISOString();
+  await db
+    .prepare(
+      `
+      INSERT INTO ${DbTables.SCHEDULED_JOBS} (task_id, handler_id, name, description, enabled, schedule_type, interval_sec, next_run_after, config_json)
+      SELECT ?, ?, ?, ?, 1, 'interval', ?, ?, ?
+      WHERE NOT EXISTS (
+        SELECT 1 FROM ${DbTables.SCHEDULED_JOBS} WHERE task_id = ?
+      )
+    `,
+    )
+    .bind(
+      "cleanup_upload_sessions",
+      "cleanup_upload_sessions",
+      "清理分片上传会话（默认）",
+      "定期清理本地分片上传会话记录，保持活跃列表干净。",
+      cleanupIntervalSec,
+      firstCleanupNextRunIso,
+      JSON.stringify({ keepDays: 30, activeGraceHours: 24 }),
+      "cleanup_upload_sessions",
+    )
+    .run();
+
+  const defaultSettings = [
+    {
+      key: "max_upload_size",
+      value: "100",
+      description: "单次最大上传文件大小限制(MB)",
+      type: "number",
+      group_id: 1,
+      sort_order: 1,
+      flags: 0,
+    },
+    {
+      key: "webdav_upload_mode",
+      value: "chunked",
+      description: "WebDAV 客户端上传模式。流式上传大文件，单次上传适合小文件或兼容性场景。",
+      type: "select",
+      group_id: 3,
+      options: JSON.stringify([
+        { value: "chunked", label: "流式上传" },
+        { value: "single", label: "单次上传" },
+      ]),
+      sort_order: 1,
+      flags: 0,
+    },
+    {
+      key: "proxy_sign_all",
+      value: "true",
+      description: "是否对所有文件访问请求进行代理签名。",
+      type: "bool",
+      group_id: 1,
+      sort_order: 2,
+      flags: 0,
+    },
+    {
+      key: "proxy_sign_expires",
+      value: "0",
+      description: "代理签名的过期时间（秒），0表示永不过期。",
+      type: "number",
+      group_id: 1,
+      sort_order: 3,
+      flags: 0,
+    },
+  ];
+
+  for (const setting of defaultSettings) {
+    const existing = await db.prepare(`SELECT value FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind(setting.key).first();
+    if (!existing) {
+      await db
+        .prepare(
+          `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, options, sort_order, flags)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          setting.key,
+          setting.value,
+          setting.description,
+          setting.type,
+          setting.group_id,
+          setting.options || null,
+          setting.sort_order,
+          setting.flags,
+        )
+        .run();
+    }
+  }
+}
+
+export async function addPreviewSettings(db) {
+  console.log("开始添加预览设置默认值...");
+
+  const previewSettings = [
+    {
+      key: "preview_text_types",
+      value:
+        "txt,htm,html,xml,java,properties,sql,js,md,json,conf,ini,vue,php,py,bat,yml,yaml,go,sh,c,cpp,h,hpp,tsx,vtt,srt,ass,rs,lrc,dockerfile,makefile,gitignore,license,readme",
+      description: "支持预览的文本文件扩展名，用逗号分隔",
+      type: "textarea",
+      group_id: 2,
+      sort_order: 1,
+      flags: 0,
+    },
+    {
+      key: "preview_audio_types",
+      value: "mp3,flac,ogg,m4a,wav,opus,wma",
+      description: "支持预览的音频文件扩展名，用逗号分隔",
+      type: "textarea",
+      group_id: 2,
+      sort_order: 2,
+      flags: 0,
+    },
+    {
+      key: "preview_video_types",
+      value: "mp4,mkv,avi,mov,rmvb,webm,flv,m3u8,ts,m2ts",
+      description: "支持预览的视频文件扩展名，用逗号分隔",
+      type: "textarea",
+      group_id: 2,
+      sort_order: 3,
+      flags: 0,
+    },
+    {
+      key: "preview_image_types",
+      value: "jpg,tiff,jpeg,png,gif,bmp,svg,ico,swf,webp,avif",
+      description: "支持预览的图片文件扩展名，用逗号分隔",
+      type: "textarea",
+      group_id: 2,
+      sort_order: 4,
+      flags: 0,
+    },
+    {
+      key: "preview_office_types",
+      value: "doc,docx,xls,xlsx,ppt,pptx,rtf",
+      description: "支持预览的Office文档扩展名（需要在线转换），用逗号分隔",
+      type: "textarea",
+      group_id: 2,
+      sort_order: 5,
+      flags: 0,
+    },
+    {
+      key: "preview_document_types",
+      value: "pdf",
+      description: "支持预览的文档文件扩展名（可直接预览），用逗号分隔",
+      type: "textarea",
+      group_id: 2,
+      sort_order: 6,
+      flags: 0,
+    },
+    {
+      key: "preview_document_apps",
+      value: JSON.stringify(
+        {
+          "doc,docx,xls,xlsx,ppt,pptx,rtf": {
+            microsoft: {
+              urlTemplate: "https://view.officeapps.live.com/op/view.aspx?src=$e_url",
+            },
+            google: {
+              urlTemplate: "https://docs.google.com/viewer?url=$e_url&embedded=true",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      description: "文档/Office 预览使用的 DocumentApp 模板配置，JSON 结构：按扩展名映射到各个预览服务的 URL 模板",
+      type: "textarea",
+      group_id: 2,
+      sort_order: 7,
+      flags: 0,
+    },
+  ];
+
+  for (const setting of previewSettings) {
+    const existing = await db.prepare(`SELECT key FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind(setting.key).first();
+    if (!existing) {
+      await db
+        .prepare(
+          `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, sort_order, flags, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        )
+        .bind(setting.key, setting.value, setting.description, setting.type, setting.group_id, setting.sort_order, setting.flags)
+        .run();
+    }
+  }
+}
+
+export async function addFileNamingStrategySetting(db) {
+  console.log("开始添加文件命名策略系统设置...");
+
+  const existing = await db.prepare(`SELECT key FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind("file_naming_strategy").first();
+  if (!existing) {
+    const options = JSON.stringify([
+      { value: "overwrite", label: "覆盖模式" },
+      { value: "random_suffix", label: "随机后缀模式" },
+    ]);
+
+    await db
+      .prepare(
+        `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, options, sort_order, flags, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      )
+      .bind(
+        "file_naming_strategy",
+        "overwrite",
+        "文件命名策略：覆盖模式使用原始文件名（可能冲突），随机后缀模式避免冲突且保持文件名可读性。",
+        "select",
+        1,
+        options,
+        4,
+        0,
+      )
+      .run();
+    console.log("成功添加文件命名策略设置");
+  }
+}
+
+export async function addDefaultProxySetting(db) {
+  console.log("开始添加默认代理设置...");
+
+  const existing = await db.prepare(`SELECT key FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind("default_use_proxy").first();
+  if (!existing) {
+    await db
+      .prepare(
+        `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, sort_order, flags, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      )
+      .bind(
+        "default_use_proxy",
+        "false",
+        "文件管理的默认代理设置。启用后新上传文件默认使用Worker代理，禁用后默认使用直链。",
+        "bool",
+        1,
+        5,
+        0,
+      )
+      .run();
+  }
+}
+
+export async function addSiteSettings(db) {
+  console.log("开始添加站点设置分组和公告栏设置...");
+
+  const siteSettings = [
+    {
+      key: "site_title",
+      value: "CloudPaste",
+      description: "站点标题，显示在浏览器标签页和页面标题中",
+      type: "text",
+      group_id: 4,
+      sort_order: 1,
+      flags: 0,
+    },
+    {
+      key: "site_favicon_url",
+      value: "",
+      description: "站点图标URL，支持https链接或base64格式，留空使用默认图标",
+      type: "text",
+      group_id: 4,
+      sort_order: 2,
+      flags: 0,
+    },
+    {
+      key: "site_announcement_enabled",
+      value: "false",
+      description: "是否在首页显示公告栏",
+      type: "bool",
+      group_id: 4,
+      sort_order: 3,
+      flags: 0,
+    },
+    {
+      key: "site_announcement_content",
+      value: "",
+      description: "公告内容，支持 Markdown 格式",
+      type: "textarea",
+      group_id: 4,
+      sort_order: 4,
+      flags: 0,
+    },
+    {
+      key: "site_footer_markdown",
+      value: "© 2025 CloudPaste. 保留所有权利。",
+      description: "页脚内容，支持 Markdown 格式，留空则不显示页脚",
+      type: "textarea",
+      group_id: 4,
+      sort_order: 5,
+      flags: 0,
+    },
+  ];
+
+  for (const setting of siteSettings) {
+    const existing = await db.prepare(`SELECT key FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind(setting.key).first();
+    if (!existing) {
+      await db
+        .prepare(
+          `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, options, sort_order, flags, updated_at)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, ?, CURRENT_TIMESTAMP)`,
+        )
+        .bind(setting.key, setting.value, setting.description, setting.type, setting.group_id, setting.sort_order, setting.flags)
+        .run();
+      console.log(`成功添加站点设置: ${setting.key}`);
+    }
+  }
+}
+
+export async function addCustomContentSettings(db) {
+  console.log("开始添加自定义头部和body设置...");
+
+  const customContentSettings = [
+    {
+      key: "site_custom_head",
+      value: "",
+      description: "在此处设置的任何内容都会自动放置在网页头部的开头",
+      type: "textarea",
+      group_id: 4,
+      sort_order: 6,
+      flags: 0,
+    },
+    {
+      key: "site_custom_body",
+      value: "",
+      description: "在此处设置的任何内容都会自动放置在网页正文的末尾",
+      type: "textarea",
+      group_id: 4,
+      sort_order: 7,
+      flags: 0,
+    },
+  ];
+
+  for (const setting of customContentSettings) {
+    const existing = await db.prepare(`SELECT key FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind(setting.key).first();
+    if (!existing) {
+      await db
+        .prepare(
+          `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, options, sort_order, flags, updated_at)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, ?, CURRENT_TIMESTAMP)`,
+        )
+        .bind(setting.key, setting.value, setting.description, setting.type, setting.group_id, setting.sort_order, setting.flags)
+        .run();
+      console.log(`成功添加自定义内容设置: ${setting.key}`);
+    } else {
+      console.log(`自定义内容设置 ${setting.key} 已存在，跳过添加`);
+    }
+  }
+
+  console.log("自定义头部和body设置添加完成");
+}
+
+/**
+ * SQLite/D1 种子数据（legacy）
+ *
+ * 来源：历史初始化实现（原 `backend/src/utils/database.js`，现已迁移到 db/migrations/sqlite/engine）
+ */
+export async function createDefaultAdmin(db) {
+  console.log("检查默认管理员账户...");
+
+  const adminCount = await db.prepare(`SELECT COUNT(*) as count FROM ${DbTables.ADMINS}`).first();
+
+  if (adminCount.count === 0) {
+    const adminId = crypto.randomUUID();
+    // 密码 "admin123" 的 SHA-256 哈希
+    const defaultPassword = "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9";
+
+    await db
+      .prepare(
+        `INSERT INTO ${DbTables.ADMINS} (id, username, password)
+         VALUES (?, ?, ?)`,
+      )
+      .bind(adminId, "admin", defaultPassword)
+      .run();
+
+    console.log("已创建默认管理员账户: admin/admin123");
+  }
+}
+
+export async function createDefaultGuestApiKey(db) {
+  console.log("检查默认游客 API 密钥...");
+
+  const guestCount = await db.prepare(`SELECT COUNT(*) as count FROM ${DbTables.API_KEYS} WHERE role = 'GUEST'`).first();
+
+  if (guestCount && guestCount.count > 0) {
+    console.log("已存在游客 API 密钥，跳过创建");
+    return;
+  }
+
+  const id = crypto.randomUUID();
+  const key = "guest";
+  const expiresAt = new Date("9999-12-31T23:59:59Z").toISOString();
+
+  await db
+    .prepare(
+      `INSERT INTO ${DbTables.API_KEYS} (id, name, key, permissions, role, basic_path, is_enable, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(id, "guest", key, 0, "GUEST", "/", 0, expiresAt)
+    .run();
+
+  console.log("已创建默认游客 API 密钥");
+}
+
+export default {
+  initDefaultSettings,
+  addPreviewSettings,
+  addSiteSettings,
+  addCustomContentSettings,
+  addFileNamingStrategySetting,
+  addDefaultProxySetting,
+  createDefaultAdmin,
+  createDefaultGuestApiKey,
+};

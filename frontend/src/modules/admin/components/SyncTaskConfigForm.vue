@@ -251,7 +251,7 @@
 
               <!-- 路径提示 -->
               <div class="panel-hint" :class="darkMode ? 'text-gray-500' : 'text-gray-400'">
-                {{ $t('admin.scheduledJobs.syncTask.targetPathHint', '必须是文件夹路径') }}
+                {{ $t('admin.scheduledJobs.syncTask.targetPathHint', '可以是文件夹路径（自动拼接源文件名），也可手动重命名文件路径') }}
               </div>
             </div>
           </div>
@@ -516,7 +516,12 @@ const toggleTargetExpand = (pair) => {
 
 // 切换路径对整体展开/收缩
 const togglePairCollapsed = (pair) => {
-  pair.collapsed = !pair.collapsed
+  const willCollapse = !pair.collapsed
+  if (willCollapse) {
+    applyQuickPath(pair, 'source')
+    applyQuickPath(pair, 'target')
+  }
+  pair.collapsed = willCollapse
 }
 
 const applyQuickPath = (pair, type) => {

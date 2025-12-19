@@ -207,8 +207,8 @@
                       </span>
                     </span>
                     <!-- 文件大小 -->
-                    <span v-if="item.size || item.bytesTransferred" class="flex-shrink-0 tabular-nums text-blue-500">
-                      {{ formatFileSize(item.size || item.bytesTransferred) }}
+                    <span v-if="item.fileSize || item.bytesTransferred" class="flex-shrink-0 tabular-nums text-blue-500">
+                      {{ formatFileSize(item.fileSize || item.bytesTransferred) }}
                     </span>
                   </div>
                 </div>

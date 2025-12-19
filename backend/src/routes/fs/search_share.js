@@ -20,7 +20,7 @@ const extractSearchParams = (queryParams) => {
   const mountId = queryParams.mount_id || "";
   const path = queryParams.path || "";
   const limit = parseInt(queryParams.limit) || 50;
-  const offset = parseInt(queryParams.offset) || 0;
+  const cursor = queryParams.cursor || "";
 
   return {
     query,
@@ -28,7 +28,7 @@ const extractSearchParams = (queryParams) => {
     mountId,
     path,
     limit: Math.min(limit, 200),
-    offset: Math.max(offset, 0),
+    cursor,
   };
 };
 
@@ -68,12 +68,12 @@ export const registerSearchShareRoutes = (router, helpers) => {
     const userInfo = c.get("userInfo");
     const { userIdOrInfo, userType } = getServiceParams(userInfo);
 
-    if (!searchParams.query || searchParams.query.trim().length < 2) {
-      throw new ValidationError("搜索查询至少需要2个字符");
+    if (!searchParams.query || searchParams.query.trim().length < 3) {
+      throw new ValidationError("搜索查询至少需要3个字符");
     }
 
     const mountManager = new MountManager(db, encryptionSecret, repositoryFactory);
-    const fileSystem = new FileSystem(mountManager);
+    const fileSystem = new FileSystem(mountManager, c.env);
     const accessibleMounts = await getAccessibleMounts(db, userIdOrInfo, userType);
     const result = await fileSystem.searchFiles(searchParams.query, searchParams, userIdOrInfo, userType, accessibleMounts);
 

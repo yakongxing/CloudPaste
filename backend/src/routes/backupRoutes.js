@@ -21,7 +21,7 @@ backupRoutes.post("/api/admin/backup/create", requireAdmin, async (c) => {
     throw new ValidationError("模块备份必须选择至少一个模块");
   }
 
-  const backupService = new BackupService(c.env.DB);
+  const backupService = new BackupService(c.env.DB, c.env);
   const backupData = await backupService.createBackup({
     backup_type,
     selected_modules,
@@ -63,7 +63,7 @@ backupRoutes.post("/api/admin/backup/restore", requireAdmin, async (c) => {
       throw new ValidationError("备份文件格式错误，请确保是有效的JSON文件");
     });
 
-  const backupService = new BackupService(c.env.DB);
+  const backupService = new BackupService(c.env.DB, c.env);
   const { userId: currentAdminId } = resolvePrincipal(c, { allowedTypes: [UserType.ADMIN] });
   const skipIntegrityCheck = formData.get("skipIntegrityCheck") === "true";
   const preserveTimestamps = formData.get("preserveTimestamps") === "true";
@@ -96,7 +96,7 @@ backupRoutes.post("/api/admin/backup/restore", requireAdmin, async (c) => {
  * GET /api/admin/backup/modules
  */
 backupRoutes.get("/api/admin/backup/modules", requireAdmin, async (c) => {
-  const backupService = new BackupService(c.env.DB);
+  const backupService = new BackupService(c.env.DB, c.env);
   const modules = await backupService.getModulesInfo();
 
   return jsonOk(c, { modules }, "获取模块信息成功");

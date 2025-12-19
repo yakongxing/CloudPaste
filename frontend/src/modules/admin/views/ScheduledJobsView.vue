@@ -578,14 +578,14 @@ const jobColumns = computed(() => [
 
 // 列宽度配置
 const jobColumnClasses = {
-  select: "w-10",
+  select: "w-10 text-center",
   name: "w-48",
-  schedule: "w-32",
-  lastRunFinishedAt: "w-32",
-  nextRunAfter: "w-32",
-  runCount: "w-24",
-  enabled: "w-24",
-  actions: "w-40"
+  schedule: "w-32 text-center",
+  lastRunFinishedAt: "w-32 text-center",
+  nextRunAfter: "w-32 text-center",
+  runCount: "w-24 text-center",
+  enabled: "w-24 text-center",
+  actions: "w-40 text-center"
 };
 
 // 注意：初始化逻辑已合并到上面的 onMounted 钩子中

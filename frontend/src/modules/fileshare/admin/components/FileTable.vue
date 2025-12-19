@@ -601,13 +601,14 @@ const fileColumns = computed(() => [
 
 // 列样式配置
 const fileColumnClasses = {
-  select: "w-10",
-  mimetype: "hidden md:table-cell",
-  size: "hidden sm:table-cell",
-  remaining_views: "hidden xl:table-cell",
-  storage_config: "hidden lg:table-cell",
-  created_by: "hidden lg:table-cell",
-  created_at: "hidden sm:table-cell",
+  select: "w-10 text-center",
+  mimetype: "hidden md:table-cell text-center",
+  size: "hidden sm:table-cell text-center",
+  remaining_views: "hidden xl:table-cell text-center",
+  storage_config: "hidden lg:table-cell text-center",
+  created_by: "hidden lg:table-cell text-center",
+  created_at: "hidden sm:table-cell text-center",
+  actions: "text-center",
 };
 
 // 处理选择变化

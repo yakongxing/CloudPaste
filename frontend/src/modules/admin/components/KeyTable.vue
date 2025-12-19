@@ -470,12 +470,12 @@ const keyColumns = computed(() => [
 const keyColumnClasses = computed(() => ({
   name: "",
   key: "",
-  permissions: "hidden lg:table-cell",
-  basic_path: "hidden xl:table-cell",
-  expires_at: "hidden 2xl:table-cell",
-  last_used: "hidden 2xl:table-cell",
-  status: "",
-  actions: ""
+  permissions: "hidden lg:table-cell text-center",
+  basic_path: "hidden xl:table-cell text-center",
+  expires_at: "hidden 2xl:table-cell text-center",
+  last_used: "hidden 2xl:table-cell text-center",
+  status: "text-center",
+  actions: "text-center"
 }));
 
 // ========== 选择管理 ==========

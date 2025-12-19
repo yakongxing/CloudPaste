@@ -455,11 +455,11 @@ const metaColumns = computed(() => [
 // 列样式配置
 const metaColumnClasses = computed(() => ({
   path: "",
-  headerMarkdown: "hidden sm:table-cell",
-  footerMarkdown: "hidden sm:table-cell",
-  hidePatterns: "hidden md:table-cell",
-  password: "hidden md:table-cell",
-  createdAt: "hidden lg:table-cell",
-  actions: "",
+  headerMarkdown: "hidden sm:table-cell text-center",
+  footerMarkdown: "hidden sm:table-cell text-center",
+  hidePatterns: "hidden md:table-cell text-center",
+  password: "hidden md:table-cell text-center",
+  createdAt: "hidden lg:table-cell text-center",
+  actions: "text-center",
 }));
 </script>
