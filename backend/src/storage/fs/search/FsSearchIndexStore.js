@@ -27,7 +27,8 @@ function toMsFromIso(iso) {
 
 function toIsoFromMs(ms) {
   const n = Number(ms);
-  if (!Number.isFinite(n) || n <= 0) return new Date().toISOString();
+  // 索引里的 modified_ms 为 0/无效时，代表“未知”
+  if (!Number.isFinite(n) || n <= 0) return null;
   return new Date(n).toISOString();
 }
 
@@ -72,6 +73,52 @@ export class FsSearchIndexStore {
       if (row?.mount_id) map.set(String(row.mount_id), row);
     }
     return map;
+  }
+
+  /**
+   * 获取“当前目录的直接子目录”的聚合摘要（基于索引）
+   * - 用于挂载浏览：当存储驱动无法给出目录 size/modified 时，用索引兜底
+   * - 注意：这里的 modified 更接近“目录内容更新时间”（子孙项的最大 modified_ms）
+   *
+   * @param {string} mountId
+   * @param {string} parentDirFsPath 目录路径（建议以 / 结尾；会在内部做规范化）
+   * @returns {Promise<Array<{ dir_path: string, total_size: number, latest_modified_ms: number, entry_count: number }>>}
+   */
+  async getChildDirectoryAggregates(mountId, parentDirFsPath) {
+    const id = String(mountId || "").trim();
+    if (!id) return [];
+
+    let parent = String(parentDirFsPath || "").trim();
+    if (!parent) return [];
+    if (parent !== "/" && !parent.endsWith("/")) parent = `${parent}/`;
+
+    // SQLite substr 是 1-based；这里取 parent 后面的相对路径
+    const startPos = parent.length + 1;
+    const likePrefix = `${parent}%`;
+
+    const sql = `
+      WITH scoped AS (
+        SELECT
+          fs_path,
+          is_dir,
+          size,
+          modified_ms,
+          substr(fs_path, ?) AS rel
+        FROM ${DbTables.FS_SEARCH_INDEX_ENTRIES}
+        WHERE mount_id = ? AND fs_path LIKE ?
+      )
+      SELECT
+        (? || substr(rel, 1, instr(rel, '/'))) AS dir_path,
+        COALESCE(SUM(CASE WHEN is_dir = 0 THEN size ELSE 0 END), 0) AS total_size,
+        COALESCE(MAX(modified_ms), 0) AS latest_modified_ms,
+        COUNT(*) AS entry_count
+      FROM scoped
+      WHERE instr(rel, '/') > 0
+      GROUP BY dir_path
+    `;
+
+    const resp = await this.db.prepare(sql).bind(startPos, id, likePrefix, parent).all();
+    return Array.isArray(resp?.results) ? resp.results : [];
   }
 
   /**

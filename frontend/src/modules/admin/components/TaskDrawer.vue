@@ -172,13 +172,13 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  XIcon,
-  ClockIcon,
-  SyncIcon,
-  CopyIcon,
-  DatabaseIcon,
-  ChevronRightIcon as ChevronIcon
-} from '@/components/icons/aliases'
+  IconX as XIcon,
+  IconClock as ClockIcon,
+  IconSync as SyncIcon,
+  IconCopy as CopyIcon,
+  IconDatabase as DatabaseIcon,
+  IconChevronRight as ChevronIcon
+} from '@/components/icons'
 import StatusBadge from './StatusBadge.vue'
 import TaskDetailsCopy from './details/TaskDetailsCopy.vue'
 import TaskDetailsFsIndexRebuild from './details/TaskDetailsFsIndexRebuild.vue'

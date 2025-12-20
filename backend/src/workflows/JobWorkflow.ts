@@ -166,7 +166,8 @@ export class JobWorkflow extends WorkflowEntrypoint<Env, JobWorkflowParams> {
               const mountManager = new MountManager(
                 this.env.DB,
                 this.env.ENCRYPTION_SECRET,
-                repositoryFactory
+                repositoryFactory,
+                { env: this.env as any },
               );
               return new FileSystem(mountManager, this.env);
             },

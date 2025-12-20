@@ -21,6 +21,10 @@ export class FsSearchIndexStore {
 
   getIndexStates(mountIds: string[]): Promise<Map<string, any>>;
   getDirtyCounts(mountIds: string[]): Promise<Map<string, number>>;
+  getChildDirectoryAggregates(
+    mountId: string,
+    parentDirFsPath: string,
+  ): Promise<Array<{ dir_path: string; total_size: number; latest_modified_ms: number; entry_count: number }>>;
 
   markIndexing(mountId: string, options?: { jobId?: string | null }): Promise<void>;
   markReady(mountId: string, indexedAtMs: number): Promise<void>;
@@ -43,4 +47,3 @@ export class FsSearchIndexStore {
 
   upsertDirty(item: { mountId: string; fsPath: string; op: FsSearchDirtyOp }): Promise<void>;
 }
-

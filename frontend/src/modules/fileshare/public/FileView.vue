@@ -30,8 +30,13 @@
     </div>
 
     <div v-else-if="loading" class="loading-container py-12 px-3 sm:px-6 max-w-6xl mx-auto text-center">
-      <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 mx-auto mb-4 border-blue-600 dark:border-blue-500"></div>
-      <p class="text-lg text-gray-600 dark:text-gray-300">{{ t("fileView.loading") }}</p>
+      <LoadingIndicator
+        :text="t('fileView.loading')"
+        :dark-mode="darkMode"
+        size="4xl"
+        :icon-class="darkMode ? 'text-blue-400' : 'text-blue-600'"
+        :text-class="darkMode ? 'text-gray-300' : 'text-gray-600'"
+      />
     </div>
 
     <div v-else class="file-container flex-1 flex flex-col py-8 px-4 max-w-4xl mx-auto w-full">
@@ -65,6 +70,7 @@ import { useFileshareService } from "@/modules/fileshare/fileshareService.js";
 import { useFileShareStore } from "@/modules/fileshare/fileShareStore.js";
 import { useGlobalMessage } from "@/composables/core/useGlobalMessage.js";
 import { IconCheck, IconExclamation } from "@/components/icons";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 
 const { t } = useI18n();
 const fileshareService = useFileshareService();

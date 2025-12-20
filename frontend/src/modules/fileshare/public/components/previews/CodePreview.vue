@@ -45,10 +45,13 @@
       </div>
       <!-- 加载状态 -->
       <div v-else class="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700">
-        <div class="text-center">
-          <IconRefresh class="animate-spin h-8 w-8 text-blue-500 mx-auto mb-2" />
-          <p class="text-blue-600 dark:text-blue-400">{{ loadingText || t("fileView.preview.code.loading") }}</p>
-        </div>
+        <LoadingIndicator
+          :text="loadingText || t('fileView.preview.code.loading')"
+          :dark-mode="darkMode"
+          size="xl"
+          icon-class="text-blue-500"
+          :text-class="darkMode ? 'text-blue-400' : 'text-blue-600'"
+        />
       </div>
     </div>
   </div>
@@ -57,7 +60,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { IconRefresh } from "@/components/icons";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 import TextRenderer from "@/components/common/text-preview/TextRenderer.vue";
 import { useFetchText } from "@/composables/text-preview/useFetchText.js";
 import { useCodeHighlight } from "@/composables/text-preview/useCodeHighlight.js";

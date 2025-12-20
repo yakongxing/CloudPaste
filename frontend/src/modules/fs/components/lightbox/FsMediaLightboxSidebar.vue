@@ -159,8 +159,8 @@ const displayName = computed(() => {
 });
 
 const formattedSize = computed(() => {
-  const bytes = props.item?.size || 0;
-  return formatFileSize(bytes);
+  const bytes = props.item?.size;
+  return typeof bytes === "number" ? formatFileSize(bytes) : "-";
 });
 
 const formattedModified = computed(() => {

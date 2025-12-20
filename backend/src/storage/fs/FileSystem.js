@@ -360,7 +360,7 @@ export class FileSystem {
    * @param {Array<Object>} accessibleMounts - 可访问挂载点列表（可选，未提供则内部查询）
    * @returns {Promise<Object>} 搜索结果
    */
-  async searchFiles(query, searchParams, userIdOrInfo, userType, accessibleMounts = null) {
+  async searchFiles(query, searchParams, userIdOrInfo, userType, accessibleMounts = null, options = {}) {
     const { scope = "global", mountId, path, limit = 50, cursor = null } = searchParams;
 
     // 参数验证（trigram contains：统一最小长度=3）
@@ -379,6 +379,70 @@ export class FileSystem {
 
     if (limit < 1 || limit > 200) {
       throw new ValidationError("limit参数必须在1-200之间");
+    }
+
+    const { pathToken = null, pathTokens = [], verifyPathPasswordToken = null, encryptionSecret = null } = options;
+    const canVerifyPathPassword = userType !== UserType.ADMIN && typeof verifyPathPasswordToken === "function";
+    const db = this.mountManager?.db;
+
+    const tokenCandidates = [];
+    const tokenSet = new Set();
+    if (typeof pathToken === "string" && pathToken) {
+      tokenCandidates.push(pathToken);
+      tokenSet.add(pathToken);
+    }
+    if (Array.isArray(pathTokens)) {
+      for (const token of pathTokens) {
+        if (typeof token === "string" && token && !tokenSet.has(token)) {
+          tokenCandidates.push(token);
+          tokenSet.add(token);
+        }
+      }
+    }
+
+    const normalizeSearchPath = (value) => {
+      const raw = typeof value === "string" ? value.trim() : "";
+      if (!raw) return "/";
+      const withLeading = raw.startsWith("/") ? raw : `/${raw}`;
+      const collapsed = withLeading.replace(/\/{2,}/g, "/");
+      return collapsed.replace(/\/+$/g, "") || "/";
+    };
+
+    const resolveBasicPath = () => {
+      if (typeof userIdOrInfo === "string") {
+        return "/";
+      }
+      return userIdOrInfo?.basicPath ?? "/";
+    };
+
+    const basicPath = userType === UserType.API_KEY ? resolveBasicPath() : "/";
+    const normalizedBasicPath = normalizeSearchPath(basicPath);
+
+    const requestedPathPrefix =
+      scope === "directory" && typeof path === "string" && path
+        ? normalizeSearchPath(path)
+        : null;
+
+    let effectivePathPrefix = requestedPathPrefix;
+
+    if (userType === UserType.API_KEY && normalizedBasicPath !== "/") {
+      if (!effectivePathPrefix) {
+        effectivePathPrefix = normalizedBasicPath;
+      } else if (
+        effectivePathPrefix === normalizedBasicPath ||
+        effectivePathPrefix.startsWith(`${normalizedBasicPath}/`)
+      ) {
+        // 目录范围在 basicPath 内，保持用户选择
+      } else if (normalizedBasicPath.startsWith(`${effectivePathPrefix}/`)) {
+        // 用户选择了 basicPath 的父级目录，收敛到 basicPath
+        effectivePathPrefix = normalizedBasicPath;
+      } else {
+        throw new AuthorizationError("搜索路径越权");
+      }
+    }
+
+    if (canVerifyPathPassword && (!db || !encryptionSecret)) {
+      throw new DriverError("路径密码校验不可用");
     }
 
     // 获取可访问的挂载点 - 为安全起见，这里也做兜底
@@ -479,23 +543,75 @@ export class FileSystem {
     }
 
     const mountInfoMap = new Map(targetMounts.map((m) => [m.id, m]));
-    const pathPrefix =
-      scope === "directory" && typeof path === "string" && path
-        ? path.replace(/\/+$/g, "") || "/"
-        : null;
 
-    const indexResult = await store.search({
-      query,
-      allowedMountIds: scope === "global" ? readyMountIds : allowedMountIds,
-      scope,
-      mountId,
-      pathPrefix,
-      limit,
-      cursor: cursor || null,
-    });
+    const filterByPassword = async (items) => {
+      if (!canVerifyPathPassword) {
+        return { visible: items, filteredCount: 0 };
+      }
+      const visible = [];
+      let filteredCount = 0;
+      const candidates = tokenCandidates.length > 0 ? tokenCandidates : [null];
+      for (const item of items) {
+        let allowed = false;
+        for (const token of candidates) {
+          const verification = await verifyPathPasswordToken(db, item.path, token, encryptionSecret);
+          if (!verification.requiresPassword || verification.verified) {
+            allowed = true;
+            break;
+          }
+        }
+        if (!allowed) {
+          filteredCount += 1;
+          continue;
+        }
+        visible.push(item);
+      }
+      return { visible, filteredCount };
+    };
+
+    let collected = [];
+    let filteredByPassword = 0;
+    let remaining = limit;
+    let pageCursor = cursor || null;
+    let hasMore = false;
+    let nextCursor = null;
+    let unfilteredTotal = null;
+
+    while (remaining > 0) {
+      const indexResult = await store.search({
+        query,
+        allowedMountIds: scope === "global" ? readyMountIds : allowedMountIds,
+        scope,
+        mountId,
+        pathPrefix: effectivePathPrefix,
+        limit: remaining,
+        cursor: pageCursor,
+      });
+
+      if (typeof indexResult.total === "number" && unfilteredTotal === null) {
+        unfilteredTotal = indexResult.total;
+      }
+
+      const { visible, filteredCount } = await filterByPassword(indexResult.results);
+      collected.push(...visible);
+      filteredByPassword += filteredCount;
+      remaining = limit - collected.length;
+
+      if (!indexResult.hasMore || !indexResult.nextCursor) {
+        break;
+      }
+
+      if (remaining <= 0) {
+        hasMore = true;
+        nextCursor = indexResult.nextCursor;
+        break;
+      }
+
+      pageCursor = indexResult.nextCursor;
+    }
 
     // 补齐挂载显示字段（避免 join，直接用内存映射）
-    const enriched = indexResult.results.map((item) => {
+    const enriched = collected.map((item) => {
       const mountRow = mountInfoMap.get(item.mount_id);
       return {
         ...item,
@@ -523,16 +639,23 @@ export class FileSystem {
       }),
     );
 
+    const pathRestricted = userType === UserType.API_KEY && normalizedBasicPath !== "/";
+
     return {
-      ...indexResult,
       results: typedResults,
+      total: typeof unfilteredTotal === "number" ? unfilteredTotal : typedResults.length,
+      hasMore,
+      nextCursor,
       mountsSearched: scope === "global" ? readyMountIds.length : targetMounts.length,
-      searchParams: { ...searchParams, cursor: cursor || null },
+      searchParams: { ...searchParams, path: effectivePathPrefix || searchParams.path || "", cursor: cursor || null },
       indexReady: true,
       indexPartial: scope === "global" && skippedMounts.length > 0,
       searchableMountIds: scope === "global" ? readyMountIds : allowedMountIds,
       skippedMounts: scope === "global" ? skippedMounts : [],
       indexNotReadyMountIds: scope === "global" ? notReadyMountIds : [],
+      pathRestricted,
+      pathRestrictedPrefix: pathRestricted ? effectivePathPrefix : null,
+      passwordFilteredCount: filteredByPassword,
     };
   }
 
@@ -546,6 +669,7 @@ export class FileSystem {
       // - 若能解析 mount.mount_path，则将 fullPath -> subPath；让 DirectoryCacheManager.invalidatePathAndAncestors 正确命中。
       // - 若无法解析（缺少 mount 或路径不在 mount 内），降级为挂载点级失效（paths=[]），保证一致性优先。
       let normalizedSubPaths = rawPaths;
+      let normalizedDirSubPaths = [];
       if (rawPaths.length > 0) {
         const mountPathRaw = mount?.mount_path || null;
         if (!mountPathRaw) {
@@ -569,6 +693,7 @@ export class FileSystem {
 
           if (mappingFailed) {
             normalizedSubPaths = [];
+            normalizedDirSubPaths = [];
           } else {
             // - 目录路径（以 / 结尾的 hint）：失效该目录自身（祖先级联会覆盖父目录）。
             // - 文件路径：失效其父目录。
@@ -584,11 +709,13 @@ export class FileSystem {
             };
 
             const dirSet = new Set();
+            const dirHintSet = new Set();
             for (const item of mapped) {
               const sp = item?.subPath;
               if (!sp) continue;
               if (item.isDirectoryHint) {
                 dirSet.add(sp);
+                dirHintSet.add(sp);
               } else {
                 dirSet.add(toParentDir(sp));
               }
@@ -596,7 +723,9 @@ export class FileSystem {
 
             // KISS：超过阈值直接降级为 mount 级失效。
             const MAX_INVALIDATION_DIRS = 200;
-            normalizedSubPaths = dirSet.size > MAX_INVALIDATION_DIRS ? [] : Array.from(dirSet);
+            const degrade = dirSet.size > MAX_INVALIDATION_DIRS;
+            normalizedSubPaths = degrade ? [] : Array.from(dirSet);
+            normalizedDirSubPaths = degrade ? [] : Array.from(dirHintSet);
           }
         }
       }
@@ -606,6 +735,7 @@ export class FileSystem {
         mountId: resolvedMountId,
         storageConfigId: resolvedStorageConfigId,
         paths: normalizedSubPaths,
+        dirPaths: normalizedDirSubPaths,
         reason,
         db: this.mountManager.db,
       });
@@ -615,12 +745,12 @@ export class FileSystem {
       // - 仅记录派生数据变更，不影响主业务数据
       // - 不在此处做重活（不扫描、不 rebuild），只入队，由后台任务消费
       // - 依赖 resolvedMountId + rawPaths（full fs path）；若缺失则跳过
-      if (resolvedMountId && rawPaths.length > 0) {
-        const db = this.mountManager?.db;
-        if (db) {
-          const store = new FsSearchIndexStore(db);
-          const ops = [];
-          const MAX_DIRTY_OPS_PER_EVENT = 200;
+        if (resolvedMountId && rawPaths.length > 0) {
+          const db = this.mountManager?.db;
+          if (db) {
+            const store = new FsSearchIndexStore(db);
+            const ops = [];
+            const MAX_DIRTY_OPS_PER_EVENT = 200;
 
           const ensureDirPath = (p) => {
             const s = typeof p === "string" ? p : "";

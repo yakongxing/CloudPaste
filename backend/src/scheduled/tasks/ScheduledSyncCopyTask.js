@@ -147,6 +147,7 @@ export class ScheduledSyncCopyTask {
       db,
       env?.ENCRYPTION_SECRET,
       repositoryFactory,
+      { env },
     );
     const fileSystem = new FileSystem(mountManager, env);
 

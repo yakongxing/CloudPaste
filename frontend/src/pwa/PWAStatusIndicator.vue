@@ -16,7 +16,7 @@
         </span>
 
         <!-- 更新进度 -->
-        <div v-if="pwaState.isUpdating" class="animate-spin w-4 h-4 rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
+        <IconRefresh v-if="pwaState.isUpdating" class="animate-spin w-4 h-4" aria-hidden="true" />
       </div>
     </div>
 

@@ -54,8 +54,10 @@ ENV NODE_ENV=production
 ENV DATA_DIR=/data
 ENV PORT=8787
 ENV TASK_WORKER_POOL_SIZE=2
+# 调试驱动缓存 (默认 false)
+#- DEBUG_DRIVER_CACHE=false
 # 注意：这个密钥应该在运行时通过环境变量传入，这里只是设置默认值
-ENV ENCRYPTION_SECRET=PLEASE_CHANGE_THIS_IN_PRODUCTION
+ENV ENCRYPTION_SECRET=default-encryption-key
 
 # 暴露端口
 EXPOSE 8787

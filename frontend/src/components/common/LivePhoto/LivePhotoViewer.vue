@@ -77,7 +77,7 @@
 
       <!-- 加载指示器 -->
       <div v-if="state.isLoading && showLoadingIndicator" class="live-photo-viewer__loading">
-        <div class="live-photo-viewer__loading-spinner" />
+        <LoadingIndicator size="xl" icon-class="text-white" />
       </div>
     </div>
   </div>
@@ -89,6 +89,7 @@ import { useI18n } from "vue-i18n";
 import { useLivePhoto, PlaybackStyle, LivePhotoErrorType } from "./useLivePhoto.js";
 import { LIVE_PHOTO_BADGE_ICON_SVG } from "./livePhotoBadgeIconSvg.js";
 import { IconExclamationSolid } from "@/components/icons";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 
 const { t } = useI18n();
 const livePhotoBadgeIconSvg = LIVE_PHOTO_BADGE_ICON_SVG;

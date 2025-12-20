@@ -41,5 +41,10 @@ export default {
     tips: {
       keywordTips: "支持文件名模糊搜索",
     },
+
+    notices: {
+      pathRestricted: "已按你的权限将搜索范围限制为：{path}",
+      passwordFiltered: "已隐藏 {count} 条受密码保护的结果",
+    },
   },
 };

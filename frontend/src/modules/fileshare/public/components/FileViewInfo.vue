@@ -286,7 +286,7 @@ const processedPreviewUrl = computed(() => {
 
 // 格式化的文件大小
 const formattedSize = computed(() => {
-  return formatFileSize(props.fileInfo.size || 0);
+  return typeof props.fileInfo.size === "number" ? formatFileSize(props.fileInfo.size) : "-";
 });
 
 // 格式化的MIME类型

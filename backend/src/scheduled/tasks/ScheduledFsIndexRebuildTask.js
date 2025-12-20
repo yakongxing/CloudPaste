@@ -130,7 +130,7 @@ export class ScheduledFsIndexRebuildTask {
     const normalized = this._normalizeConfig(config);
 
     const repositoryFactory = ensureRepositoryFactory(db);
-    const mountManager = new MountManager(db, env?.ENCRYPTION_SECRET, repositoryFactory);
+    const mountManager = new MountManager(db, env?.ENCRYPTION_SECRET, repositoryFactory, { env });
     const fileSystem = new FileSystem(mountManager, env);
 
     // 后台任务：使用管理员身份（管理员配置并启用）

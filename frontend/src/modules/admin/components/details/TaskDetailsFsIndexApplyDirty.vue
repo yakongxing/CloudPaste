@@ -212,10 +212,10 @@ import {
   IconArrowUp,
   IconTrash,
   IconChevronDown,
-  MinusIcon as IconMinus,
   IconQueueList,
-  ClockIcon as IconClock
-} from '@/components/icons/aliases'
+  IconMinus,
+  IconClock
+} from '@/components/icons'
 
 const props = defineProps({
   task: {

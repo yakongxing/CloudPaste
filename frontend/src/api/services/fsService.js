@@ -63,6 +63,8 @@ export async function getFileInfo(path, options = {}) {
  * @param {string} searchParams.path 搜索路径（当scope为'directory'时）
  * @param {number} searchParams.limit 结果限制数量，默认50
  * @param {string|null} searchParams.cursor 分页游标（不透明字符串），默认null
+ * @param {string} searchParams.pathToken 路径密码 token（可选）
+ * @param {string[]} searchParams.pathTokens 路径密码 token 列表（可选）
  * @returns {Promise<Object>} 搜索结果响应对象
  */
 export async function searchFiles(query, searchParams = {}) {
@@ -83,7 +85,20 @@ export async function searchFiles(query, searchParams = {}) {
     params.cursor = String(searchParams.cursor);
   }
 
-  return get("/fs/search", { params });
+  const headers = {};
+  if (searchParams.pathToken) {
+    headers["x-fs-path-token"] = searchParams.pathToken;
+  }
+  if (Array.isArray(searchParams.pathTokens) && searchParams.pathTokens.length > 0) {
+    headers["x-fs-path-tokens"] = searchParams.pathTokens.join(",");
+  }
+
+  const requestOptions = { params };
+  if (Object.keys(headers).length > 0) {
+    requestOptions.headers = headers;
+  }
+
+  return get("/fs/search", requestOptions);
 }
 
 /**

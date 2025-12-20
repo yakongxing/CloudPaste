@@ -160,7 +160,7 @@ onUnmounted(() => {
               >
                 <span v-if="!isInstalling">{{ t("pwa.actions.install") }}</span>
                 <span v-else class="flex items-center space-x-1">
-                  <div class="animate-spin w-3 h-3 rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
+                  <IconRefresh class="animate-spin w-3 h-3" aria-hidden="true" />
                   <span>{{ t("pwa.install.installing") }}</span>
                 </span>
               </button>
@@ -212,7 +212,7 @@ onUnmounted(() => {
               >
                 <span v-if="!isUpdating">{{ t("pwa.update.updateApp") }}</span>
                 <span v-else class="flex items-center space-x-1">
-                  <div class="animate-spin w-3 h-3 rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
+                  <IconRefresh class="animate-spin w-3 h-3" aria-hidden="true" />
                   <span>{{ t("pwa.update.updating") }}</span>
                 </span>
               </button>

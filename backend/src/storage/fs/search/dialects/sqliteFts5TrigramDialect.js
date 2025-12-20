@@ -32,7 +32,8 @@ function buildWhereAndBind(p) {
     bind.push(String(p.mountId));
   }
 
-  if (scope === "directory" && p?.pathPrefix) {
+  // 只要传入 pathPrefix，就强制按路径前缀过滤
+  if (p?.pathPrefix) {
     const prefix = String(p.pathPrefix || "").replace(/\/+$/g, "") || "/";
     const like = prefix === "/" ? "/%" : `${prefix}/%`;
     where.push(`e.fs_path LIKE ?`);

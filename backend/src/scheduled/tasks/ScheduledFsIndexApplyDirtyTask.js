@@ -122,7 +122,7 @@ export class ScheduledFsIndexApplyDirtyTask {
     const normalized = this._normalizeConfig(config);
 
     const repositoryFactory = ensureRepositoryFactory(db);
-    const mountManager = new MountManager(db, env?.ENCRYPTION_SECRET, repositoryFactory);
+    const mountManager = new MountManager(db, env?.ENCRYPTION_SECRET, repositoryFactory, { env });
     const fileSystem = new FileSystem(mountManager, env);
 
     const systemUserId = "system-scheduled-fs-index";

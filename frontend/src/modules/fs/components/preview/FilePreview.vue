@@ -26,7 +26,7 @@
             :disabled="isGeneratingPreview"
           >
             <IconEye v-if="!isGeneratingPreview" size="sm" class="mr-1.5" aria-hidden="true" />
-            <div v-else class="animate-spin rounded-full w-4 h-4 mr-1.5 border-b-2 border-current"></div>
+            <IconRefresh v-else class="animate-spin w-4 h-4 mr-1.5" aria-hidden="true" />
             <span>{{ isGeneratingPreview ? t("mount.filePreview.generating") : t("mount.filePreview.directPreview") }}</span>
           </button>
 
@@ -38,7 +38,7 @@
             :disabled="isCreatingShare"
           >
             <IconLink v-if="!isCreatingShare" size="sm" class="mr-1.5" aria-hidden="true" />
-            <div v-else class="animate-spin rounded-full w-4 h-4 mr-1.5 border-b-2 border-current"></div>
+            <IconRefresh v-else class="animate-spin w-4 h-4 mr-1.5" aria-hidden="true" />
             <span>{{ isCreatingShare ? t("mount.filePreview.creatingShare") : t("mount.filePreview.createShare") }}</span>
           </button>
         </div>
@@ -116,7 +116,7 @@
               :title="$t('mount.filePreview.saveFileShortcut')"
             >
               <!-- Loading图标 -->
-              <div v-if="isSaving" class="w-4 h-4 mr-1 animate-spin rounded-full border-b-2 border-current"></div>
+              <IconRefresh v-if="isSaving" class="w-4 h-4 mr-1 animate-spin" aria-hidden="true" />
               <!-- 保存图标 -->
               <IconSave v-else size="sm" class="mr-1" aria-hidden="true" />
               {{ isSaving ? $t("mount.filePreview.saving") : $t("mount.filePreview.save") }}
@@ -258,7 +258,7 @@
                 :title="$t('mount.filePreview.saveFileShortcut')"
               >
                 <!-- Loading图标 -->
-                <div v-if="isSaving" class="w-4 h-4 mr-1 animate-spin rounded-full border-b-2 border-current"></div>
+                <IconRefresh v-if="isSaving" class="w-4 h-4 mr-1 animate-spin" aria-hidden="true" />
                 <!-- 保存图标 -->
                 <IconSave v-else size="sm" class="mr-1" aria-hidden="true" />
                 {{ isSaving ? $t("mount.filePreview.saving") : $t("mount.filePreview.save") }}
@@ -278,8 +278,12 @@
         </div>
         <!-- 加载指示器 -->
         <div v-if="isLoading" class="flex-1 flex items-center justify-center">
-          <div class="flex flex-col items-center justify-center p-12">
-            <div class="animate-spin rounded-full h-12 w-12 border-b-2" :class="darkMode ? 'border-primary-500' : 'border-primary-600'"></div>
+          <div class="p-12">
+            <LoadingIndicator
+              :dark-mode="darkMode"
+              size="3xl"
+              :icon-class="darkMode ? 'text-primary-500' : 'text-primary-600'"
+            />
           </div>
         </div>
 
@@ -311,7 +315,11 @@
             @error="handleContentError"
           />
           <div v-else class="loading-indicator text-center py-8">
-            <div class="animate-spin rounded-full h-10 w-10 border-b-2 mx-auto" :class="darkMode ? 'border-primary-500' : 'border-primary-600'"></div>
+            <LoadingIndicator
+              :dark-mode="darkMode"
+              size="2xl"
+              :icon-class="darkMode ? 'text-primary-500' : 'text-primary-600'"
+            />
           </div>
         </div>
 
@@ -446,7 +454,8 @@
 <script setup>
 import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
-import { IconCollapse, IconDocument, IconDownload, IconError, IconExclamationSolid, IconExpand, IconEye, IconLink, IconSave } from "@/components/icons";
+import { IconCollapse, IconDocument, IconDownload, IconError, IconExclamationSolid, IconExpand, IconEye, IconLink, IconRefresh, IconSave } from "@/components/icons";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 import { usePreviewRenderers, useFilePreviewExtensions, useFileSave } from "@/composables/index.js";
 import { usePathPassword } from "@/composables/usePathPassword.js";
 import { useAuthStore } from "@/stores/authStore.js";

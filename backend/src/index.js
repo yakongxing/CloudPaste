@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import adminRoutes from "./routes/adminRoutes.js";
+import adminFsIndexRoutes from "./routes/adminFsIndexRoutes.js";
 import apiKeyRoutes from "./routes/apiKeyRoutes.js";
 import { backupRoutes } from "./routes/backupRoutes.js";
 
@@ -179,6 +180,7 @@ app.options("/", (c) => {
 
 // 注册路由
 app.route("/", adminRoutes);
+app.route("/", adminFsIndexRoutes);
 app.route("/", apiKeyRoutes);
 app.route("/", backupRoutes);
 app.route("/", fileViewRoutes);

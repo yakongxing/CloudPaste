@@ -110,7 +110,7 @@ export const registerOpsRoutes = (router, helpers) => {
       throw new ValidationError("请提供原路径和新路径");
     }
 
-    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory);
+    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory, { env: c.env });
     const fileSystem = new FileSystem(mountManager);
     await fileSystem.renameItem(oldPath, newPath, userIdOrInfo, userType);
 
@@ -131,7 +131,7 @@ export const registerOpsRoutes = (router, helpers) => {
       throw new ValidationError("请提供有效的路径数组");
     }
 
-    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory);
+    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory, { env: c.env });
     const fileSystem = new FileSystem(mountManager);
     const result = await fileSystem.batchRemoveItems(paths, userIdOrInfo, userType);
 
@@ -153,7 +153,7 @@ export const registerOpsRoutes = (router, helpers) => {
       throw new ValidationError("请提供有效的复制项数组");
     }
 
-    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory);
+    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory, { env: c.env });
 
     // ========== 统一任务模式 ==========
     // 所有复制操作统一创建任务，无条件分支
@@ -238,7 +238,7 @@ export const registerOpsRoutes = (router, helpers) => {
       throw new ValidationError("请提供有效的 payload 对象");
     }
 
-    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory);
+    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory, { env: c.env });
     const fileSystem = new FileSystem(mountManager, c.env);
     const jobDescriptor = await fileSystem.createJob(taskType, payload, userIdOrInfo, userType);
 
@@ -259,7 +259,7 @@ export const registerOpsRoutes = (router, helpers) => {
       throw new ValidationError("请提供作业ID");
     }
 
-    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory);
+    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory, { env: c.env });
     const fileSystem = new FileSystem(mountManager, c.env);
     const jobStatus = await fileSystem.getJobStatus(jobId, userIdOrInfo, userType);
 
@@ -280,7 +280,7 @@ export const registerOpsRoutes = (router, helpers) => {
       throw new ValidationError("请提供作业ID");
     }
 
-    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory);
+    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory, { env: c.env });
     const fileSystem = new FileSystem(mountManager, c.env);
     await fileSystem.cancelJob(jobId, userIdOrInfo, userType);
 
@@ -309,7 +309,7 @@ export const registerOpsRoutes = (router, helpers) => {
       offset: Math.max(offset, 0),
     };
 
-    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory);
+    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory, { env: c.env });
     const fileSystem = new FileSystem(mountManager, c.env);
     const { jobs, total } = await fileSystem.listJobs(filter, userIdOrInfo, userType);
 
@@ -330,7 +330,7 @@ export const registerOpsRoutes = (router, helpers) => {
       throw new ValidationError("请提供作业ID");
     }
 
-    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory);
+    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory, { env: c.env });
     const fileSystem = new FileSystem(mountManager, c.env);
     await fileSystem.deleteJob(jobId, userIdOrInfo, userType);
 

@@ -284,10 +284,12 @@
         <div v-show="showFilePreview">
           <!-- 预览加载状态 -->
           <div v-if="isPreviewLoading" class="p-8 text-center">
-            <div class="flex flex-col items-center space-y-4">
-              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-              <div class="text-gray-600 dark:text-gray-400">{{ $t("common.loading") }}</div>
-            </div>
+            <LoadingIndicator
+              :text="$t('common.loading')"
+              :dark-mode="darkMode"
+              size="xl"
+              icon-class="text-blue-500"
+            />
           </div>
 
           <!-- 预览错误状态 -->
@@ -399,6 +401,7 @@ import { useI18n } from "vue-i18n";
 import { storeToRefs } from "pinia";
 import { useThemeMode } from "@/composables/core/useThemeMode.js";
 import { IconBack, IconExclamation, IconSearch, IconSettings, IconXCircle } from "@/components/icons";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 
 // 组合式函数 - 使用统一聚合导出
 import { useSelection, useFileOperations, useUIState, useFileBasket } from "@/composables/index.js";

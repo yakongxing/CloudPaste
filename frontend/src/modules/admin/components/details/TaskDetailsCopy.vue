@@ -173,14 +173,14 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  CopyIcon,
+  IconCopy as CopyIcon,
   IconCheck,
   IconClose,
   IconRefresh,
   IconChevronRight,
   IconChevronDown,
   IconExclamation
-} from '@/components/icons/aliases'
+} from '@/components/icons'
 
 const props = defineProps({
   task: {

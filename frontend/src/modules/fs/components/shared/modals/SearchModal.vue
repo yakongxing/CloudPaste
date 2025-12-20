@@ -75,7 +75,7 @@
               ]"
             >
               <IconSearch v-if="!isSearching" class="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />
-              <div v-else class="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-b-2 border-white"></div>
+              <IconRefresh v-else class="animate-spin h-4 w-4 sm:h-5 sm:w-5 text-white" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -120,6 +120,15 @@
           </div>
         </div>
 
+        <!-- 搜索提示信息 -->
+        <div v-if="searchNotices.length > 0" class="px-4 py-2 border-b" :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
+          <div class="space-y-1 text-xs" :class="darkMode ? 'text-blue-300' : 'text-blue-600'">
+            <div v-for="(notice, index) in searchNotices" :key="index">
+              {{ notice }}
+            </div>
+          </div>
+        </div>
+
         <!-- 搜索结果列表 -->
         <SearchResultList
           :results="searchResults"
@@ -143,7 +152,7 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { IconClose, IconSearch } from "@/components/icons";
+import { IconClose, IconRefresh, IconSearch } from "@/components/icons";
 import { useFileSearch } from "@/composables/file-system/useFileSearch.js";
 import { useUIState } from "@/composables/ui-interaction/useUIState.js";
 import SearchResultList from "./SearchResultList.vue";
@@ -179,6 +188,7 @@ const {
   searchResults,
   isSearching,
   searchError,
+  searchNotices,
   searchParams,
   searchHistory,
   searchStats,

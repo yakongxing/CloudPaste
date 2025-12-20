@@ -3,6 +3,7 @@
 // 该组件使用iframe实现HTML的安全渲染，并提供复制代码、在新窗口打开等功能
 import { ref, watch, onMounted, nextTick, onUnmounted, computed } from "vue";
 import { IconClose, IconCollapse, IconExpand } from "@/components/icons";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 
 // 定义组件接受的属性
 const props = defineProps({
@@ -220,8 +221,13 @@ onMounted(() => {
       <div class="modal-content">
         <!-- 加载状态 -->
         <div v-if="renderState === 'loading'" class="loading-state">
-          <div class="spinner" aria-hidden="true" />
-          <p>正在渲染 HTML...</p>
+          <LoadingIndicator
+            text="正在渲染 HTML..."
+            :dark-mode="darkMode"
+            size="2xl"
+            :icon-class="darkMode ? 'text-blue-400' : 'text-blue-600'"
+            text-class="text-inherit"
+          />
         </div>
 
         <!-- 错误状态 -->
@@ -441,28 +447,6 @@ onMounted(() => {
 
 .dark-mode .error-state {
   color: #f87171;
-}
-
-/* 加载动画 */
-.spinner {
-  animation: rotate 1s linear infinite;
-  width: 40px;
-  height: 40px;
-  margin-bottom: 16px;
-  border-radius: 9999px;
-  border: 4px solid rgba(59, 130, 246, 0.25);
-  border-top-color: #3b82f6;
-}
-
-.dark-mode .spinner {
-  border-color: rgba(96, 165, 250, 0.25);
-  border-top-color: #60a5fa;
-}
-
-@keyframes rotate {
-  100% {
-    transform: rotate(360deg);
-  }
 }
 
 @media (max-width: 640px) {

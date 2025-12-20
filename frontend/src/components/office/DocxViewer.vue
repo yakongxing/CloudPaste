@@ -4,7 +4,7 @@
 
     <!-- 加载状态 -->
     <div v-if="loading" class="loading-overlay">
-      <div class="animate-spin h-8 w-8 text-blue-500 rounded-full border-4 border-current border-t-transparent" aria-hidden="true" />
+      <LoadingIndicator size="xl" icon-class="text-blue-500" />
     </div>
 
     <!-- 错误状态 -->
@@ -19,6 +19,7 @@
 <script setup>
 import { nextTick, onMounted, onUnmounted, ref } from "vue";
 import { fetchFileBinaryWithAuth } from "@/api/services/fileDownloadService.js";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 
 const props = defineProps({
   contentUrl: { type: String, required: true },

@@ -13,6 +13,7 @@ import IconSettingsSvg from '~icons/heroicons-outline/cog'
 import IconCheckboxSvg from '~icons/heroicons-outline/check-circle'
 import IconTaskListSvg from '~icons/heroicons-outline/clipboard-list'
 import IconChartBarSvg from '~icons/heroicons-outline/chart-bar'
+import IconCalculatorSvg from '~icons/heroicons-outline/calculator'
 import IconFolderPlusSvg from '~icons/heroicons-outline/folder-add'
 import IconPlusSvg from '~icons/heroicons-outline/plus'
 import IconMinusSvg from '~icons/heroicons-outline/minus'
@@ -198,6 +199,7 @@ export const IconTaskList = createIcon(IconTaskListSvg)
 
 export const IconChartBar = createIcon(IconChartBarSvg)
 export const IconChartPie = createIcon(IconChartPieSvg)
+export const IconCalculator = createIcon(IconCalculatorSvg)
 
 export const IconFolderPlus = createIcon(IconFolderPlusSvg)
 
@@ -416,6 +418,7 @@ export default {
   IconTaskList,
   IconChartBar,
   IconChartPie,
+  IconCalculator,
   IconFolderPlus,
   IconPlus,
   IconMinus,

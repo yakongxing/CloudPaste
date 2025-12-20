@@ -53,7 +53,7 @@
           :class="confirmButtonClass"
         >
           <!-- 加载状态图标 -->
-          <div v-if="loading" class="animate-spin h-4 w-4 rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
+          <IconRefresh v-if="loading" class="animate-spin h-4 w-4" aria-hidden="true" />
           <span>{{ loading ? displayLoadingText : displayConfirmText }}</span>
         </button>
       </div>
@@ -135,7 +135,7 @@
           :class="confirmButtonClass"
         >
           <!-- 加载状态图标 -->
-          <div v-if="loading" class="animate-spin h-4 w-4 rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
+          <IconRefresh v-if="loading" class="animate-spin h-4 w-4" aria-hidden="true" />
           <span>{{ loading ? displayLoadingText : displayConfirmText }}</span>
         </button>
       </div>
@@ -146,7 +146,7 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { IconBack, IconExclamationSolid, IconEye, IconEyeOff, IconLockClosed } from "@/components/icons";
+import { IconBack, IconExclamationSolid, IconEye, IconEyeOff, IconLockClosed, IconRefresh } from "@/components/icons";
 
 // 国际化
 const { t } = useI18n();

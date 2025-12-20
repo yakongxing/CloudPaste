@@ -5,10 +5,12 @@ import { ref, computed, watch } from "vue";
 import { useAuthStore } from "@/stores/authStore.js";
 import { api } from "@/api";
 import { useI18n } from "vue-i18n";
+import { usePathPassword } from "@/composables/usePathPassword.js";
 
 export function useFileSearch() {
   const authStore = useAuthStore();
   const { t } = useI18n();
+  const { getPathToken, getAllPathTokens } = usePathPassword();
 
   // API调用函数 - 使用统一API，自动根据认证信息处理用户类型
   const searchApi = computed(() => {
@@ -20,7 +22,10 @@ export function useFileSearch() {
   const searchResults = ref([]);
   const isSearching = ref(false);
   const searchError = ref(null);
-  const hasPerformedSearch = ref(false); // 新增：是否已执行过搜索
+  const hasPerformedSearch = ref(false);
+  const searchNotices = ref([]);
+  const passwordFilteredTotal = ref(0);
+  const pathRestrictedPrefix = ref(null);
   const searchParams = ref({
     scope: "global", // 'global', 'mount', 'directory'
     mountId: "",
@@ -64,6 +69,9 @@ export function useFileSearch() {
 
       isSearching.value = true;
       searchError.value = null;
+      searchNotices.value = [];
+      passwordFilteredTotal.value = 0;
+      pathRestrictedPrefix.value = null;
 
       // 合并搜索参数
       const finalSearchParams = {
@@ -72,6 +80,16 @@ export function useFileSearch() {
         // 执行新搜索时强制从第一页开始
         cursor: null,
       };
+
+      const tokenPath = finalSearchParams.path || "/";
+      const token = getPathToken(tokenPath);
+      if (token) {
+        finalSearchParams.pathToken = token;
+      }
+      const tokens = getAllPathTokens();
+      if (tokens.length > 0) {
+        finalSearchParams.pathTokens = tokens;
+      }
 
       console.log("开始搜索文件:", searchTerm, finalSearchParams);
 
@@ -90,6 +108,21 @@ export function useFileSearch() {
           mountsSearched: searchData.mountsSearched || 0,
           nextCursor: searchData.nextCursor || null,
         };
+
+        if (searchData.pathRestricted && searchData.pathRestrictedPrefix) {
+          pathRestrictedPrefix.value = searchData.pathRestrictedPrefix;
+        }
+        if (searchData.passwordFilteredCount) {
+          passwordFilteredTotal.value += Number(searchData.passwordFilteredCount) || 0;
+        }
+        const notices = [];
+        if (pathRestrictedPrefix.value) {
+          notices.push(t("search.notices.pathRestricted", { path: pathRestrictedPrefix.value }));
+        }
+        if (passwordFilteredTotal.value > 0) {
+          notices.push(t("search.notices.passwordFiltered", { count: passwordFilteredTotal.value }));
+        }
+        searchNotices.value = notices;
 
         // 索引未就绪：用结构化提示引导管理员
         if (searchData && searchData.indexReady === false && searchData.hint) {
@@ -134,6 +167,16 @@ export function useFileSearch() {
         cursor: searchStats.value.nextCursor,
       };
 
+      const tokenPath = paginationParams.path || "/";
+      const token = getPathToken(tokenPath);
+      if (token) {
+        paginationParams.pathToken = token;
+      }
+      const tokens = getAllPathTokens();
+      if (tokens.length > 0) {
+        paginationParams.pathTokens = tokens;
+      }
+
       console.log("加载更多搜索结果:", { cursor: searchStats.value.nextCursor });
 
       const response = await searchApi.value(searchQuery.value, paginationParams);
@@ -142,8 +185,10 @@ export function useFileSearch() {
         const searchData = response.data;
         // 追加新结果到现有结果
         searchResults.value.push(...(searchData.results || []));
+        const existingTotal = searchStats.value.total || 0;
+        const incomingTotal = Number(searchData.total || 0);
         searchStats.value = {
-          total: searchData.total || 0,
+          total: incomingTotal > existingTotal ? incomingTotal : existingTotal,
           hasMore: searchData.hasMore || false,
           mountsSearched: searchData.mountsSearched || 0,
           nextCursor: searchData.nextCursor || null,
@@ -171,7 +216,10 @@ export function useFileSearch() {
     searchQuery.value = "";
     searchResults.value = [];
     searchError.value = null;
-    hasPerformedSearch.value = false; // 重置搜索执行状态
+    hasPerformedSearch.value = false;
+    searchNotices.value = [];
+    passwordFilteredTotal.value = 0;
+    pathRestrictedPrefix.value = null;
     searchStats.value = { total: 0, hasMore: false, mountsSearched: 0, nextCursor: null };
     // 重置分页游标
     searchParams.value.cursor = null;
@@ -289,6 +337,7 @@ export function useFileSearch() {
     searchResults,
     isSearching,
     searchError,
+    searchNotices,
     searchParams,
     searchHistory,
     searchStats,

@@ -12,10 +12,12 @@
 
       <!-- 加载中遮罩 -->
       <div v-if="loading" class="absolute inset-0 bg-white dark:bg-gray-800 bg-opacity-70 flex items-center justify-center">
-        <div class="text-center">
-          <IconRefresh size="xl" class="animate-spin text-blue-500 mx-auto mb-2" aria-hidden="true" />
-          <p class="text-blue-600 dark:text-blue-400">{{ $t("mount.filePreview.pdfLoading") || "加载 PDF 中..." }}</p>
-        </div>
+        <LoadingIndicator
+          :text="$t('mount.filePreview.pdfLoading') || '加载 PDF 中...'"
+          size="xl"
+          icon-class="text-blue-500 dark:text-blue-400"
+          text-class="text-blue-600 dark:text-blue-400"
+        />
       </div>
     </div>
 
@@ -33,7 +35,8 @@
 <script setup>
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { IconDocument, IconRefresh } from "@/components/icons";
+import { IconDocument } from "@/components/icons";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 
 const { t } = useI18n();
 

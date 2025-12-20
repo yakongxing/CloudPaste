@@ -41,5 +41,10 @@ export default {
     tips: {
       keywordTips: "Supports fuzzy file name search",
     },
+
+    notices: {
+      pathRestricted: "Search scope has been restricted to: {path}",
+      passwordFiltered: "Hidden {count} password-protected results",
+    },
   },
 };

@@ -2,12 +2,13 @@
   <div class="flex flex-col h-full min-h-0">
     <!-- 加载状态 -->
     <div v-if="loading && results.length === 0" class="flex-1 flex items-center justify-center">
-      <div class="text-center">
-        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-        <p class="text-sm" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
-          {{ t("search.status.searching") }}
-        </p>
-      </div>
+      <LoadingIndicator
+        :text="t('search.status.searching')"
+        :dark-mode="darkMode"
+        size="xl"
+        icon-class="text-blue-500"
+        :text-class="darkMode ? 'text-gray-400' : 'text-gray-500'"
+      />
     </div>
 
     <!-- 错误状态 -->
@@ -49,7 +50,7 @@
                   class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium flex-shrink-0"
                   :class="darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'"
                 >
-                  {{ formatFileSize(item.size) }}
+                  {{ typeof item.size === 'number' ? formatFileSize(item.size) : '-' }}
                 </span>
               </div>
 
@@ -91,7 +92,7 @@
           "
         >
           <span v-if="loading" class="flex items-center">
-            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+            <IconRefresh class="animate-spin h-4 w-4 mr-2" aria-hidden="true" />
             {{ t("search.results.loadingMore") }}
           </span>
           <span v-else>{{ t("search.results.loadMore") }}</span>
@@ -139,7 +140,8 @@
 <script setup>
 import { reactive } from "vue";
 import { useI18n } from "vue-i18n";
-import { IconCopy, IconError, IconFolderOpen, IconSearch } from "@/components/icons";
+import { IconCopy, IconError, IconFolderOpen, IconRefresh, IconSearch } from "@/components/icons";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 import { getFileIcon as getFileIconUtil } from "@/utils/fileTypeIcons.js";
 import { formatFileSize } from "@/utils/fileUtils.js";
 import { formatDateTime } from "@/utils/timeUtils.js";

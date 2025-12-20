@@ -637,6 +637,17 @@ export async function runLegacyMigrationByVersion(db, version) {
       console.log("版本29：tasks.trigger_type / trigger_ref 字段检查/创建完成。");
       break;
 
+    case 30:
+      console.log("版本30：为 storage_mounts 表添加 enable_folder_summary_compute 字段...");
+      await addTableField(
+        db,
+        DbTables.STORAGE_MOUNTS,
+        "enable_folder_summary_compute",
+        "enable_folder_summary_compute BOOLEAN DEFAULT 0",
+      );
+      console.log("版本30：storage_mounts.enable_folder_summary_compute 字段检查/创建完成。");
+      break;
+
     default:
       console.log(`未知的迁移版本: ${version}`);
       break;

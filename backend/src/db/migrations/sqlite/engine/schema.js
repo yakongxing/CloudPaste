@@ -177,6 +177,7 @@ export async function createStorageTables(db) {
         webdav_policy TEXT DEFAULT '302_redirect',
         enable_sign BOOLEAN DEFAULT 0,
         sign_expires INTEGER DEFAULT NULL,
+        enable_folder_summary_compute BOOLEAN DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         last_used DATETIME

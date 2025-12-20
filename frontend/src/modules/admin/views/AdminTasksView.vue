@@ -151,9 +151,9 @@
         </div>
 
         <!-- Task Table -->
-        <div v-if="loading" class="flex items-center justify-center h-64">
+          <div v-if="loading" class="flex items-center justify-center h-64">
           <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-            <LoaderIcon class="w-5 h-5 animate-spin" />
+            <RefreshIcon class="w-5 h-5 animate-spin" />
             <span>{{ t('admin.tasks.loading') }}</span>
           </div>
         </div>
@@ -286,20 +286,19 @@ import { useThemeMode } from '@/composables/core/useThemeMode.js'
 import { useConfirmDialog } from '@/composables/core/useConfirmDialog.js'
 import { useCreatorBadge } from '@/composables/admin-management/useCreatorBadge.js'
 import {
-  ActivityIcon,
-  CheckCircleIcon,
-  AlertCircleIcon,
-  DatabaseIcon,
-  SearchIcon,
-  FilterIcon,
-  LoaderIcon,
-  CalendarIcon,
-  UserIcon,
-  SyncIcon,
-  CopyIcon,
-  RefreshIcon,
-  TrashIcon
-} from '@/components/icons/aliases'
+  IconActivity as ActivityIcon,
+  IconCheckCircle as CheckCircleIcon,
+  IconAlertCircle as AlertCircleIcon,
+  IconDatabase as DatabaseIcon,
+  IconSearch as SearchIcon,
+  IconFilter as FilterIcon,
+  IconCalendar as CalendarIcon,
+  IconUser as UserIcon,
+  IconSync as SyncIcon,
+  IconCopy as CopyIcon,
+  IconRefresh as RefreshIcon,
+  IconTrash as TrashIcon
+} from '@/components/icons'
 import StatsCard from '@/modules/admin/components/StatsCard.vue'
 import StatusBadge from '@/modules/admin/components/StatusBadge.vue'
 import TaskProgressBar from '@/modules/admin/components/TaskProgressBar.vue'

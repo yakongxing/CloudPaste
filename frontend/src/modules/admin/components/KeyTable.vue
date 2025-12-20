@@ -9,6 +9,7 @@ import AdminTable from "@/components/common/AdminTable.vue";
 import ConfirmDialog from "@/components/common/dialogs/ConfirmDialog.vue";
 import { formatDateTime } from "@/utils/timeUtils.js";
 import { IconKey } from "@/components/icons";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 
 // i18n
 const { t } = useI18n();
@@ -603,8 +604,13 @@ defineExpose({
   <div class="flex flex-col">
     <!-- 加载状态 -->
     <div v-if="isLoading && apiKeys.length === 0" class="flex flex-col items-center justify-center h-40">
-      <div class="animate-spin rounded-full h-8 w-8 border-b-2" :class="darkMode ? 'border-white' : 'border-primary-500'"></div>
-      <p class="mt-3 text-sm" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">{{ $t("admin.keyManagement.loadingKeys") }}</p>
+      <LoadingIndicator
+        :text="$t('admin.keyManagement.loadingKeys')"
+        :dark-mode="darkMode"
+        size="xl"
+        :icon-class="darkMode ? 'text-white' : 'text-primary-500'"
+        :text-class="darkMode ? 'text-gray-300' : 'text-gray-600'"
+      />
     </div>
 
     <!-- 空状态 -->

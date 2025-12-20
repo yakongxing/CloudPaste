@@ -176,7 +176,7 @@
                   </div>
                   <!-- 移动端显示大小和类型信息 -->
                   <div class="text-xs block sm:hidden mt-0.5 flex items-center space-x-2" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
-                    <span v-if="!entry.isDirectory" class="flex-shrink-0">{{ formatFileSize(entry.size || 0) }}</span>
+                    <span v-if="!entry.isDirectory" class="flex-shrink-0">{{ typeof entry.size === 'number' ? formatFileSize(entry.size) : '-' }}</span>
                     <span class="truncate" :title="getMimeTypeDescription(entry)">{{ getMimeTypeDescription(entry) }}</span>
                   </div>
                 </div>
@@ -185,7 +185,7 @@
               <!-- 桌面端大小列 - 固定宽度 -->
               <div class="w-24 text-center text-sm hidden sm:block" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
                 <span v-if="entry.isDirectory">-</span>
-                <span v-else>{{ formatFileSize(entry.size || 0) }}</span>
+                <span v-else>{{ typeof entry.size === 'number' ? formatFileSize(entry.size) : '-' }}</span>
               </div>
 
               <!-- 桌面端类型列 - 固定宽度，内容过长时省略 -->

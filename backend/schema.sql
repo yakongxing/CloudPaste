@@ -305,6 +305,7 @@ CREATE TABLE storage_mounts (
   webdav_policy TEXT DEFAULT '302_redirect', -- WebDAV策略：'302_redirect' 或 'native_proxy'
   enable_sign BOOLEAN DEFAULT 0,        -- 是否启用代理签名
   sign_expires INTEGER DEFAULT NULL,    -- 签名过期时间（秒），NULL表示使用全局设置
+  enable_folder_summary_compute BOOLEAN DEFAULT 0, -- 是否启用“目录大小/时间”递归计算（兜底用）
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_used DATETIME                    -- 最后使用时间

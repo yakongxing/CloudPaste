@@ -2,6 +2,7 @@ import {
   createAdminTables,
   createFileTables,
   createFsMetaTables,
+  createFsSearchIndexTables,
   createIndexes,
   createPasteTables,
   createMigrationTables,
@@ -35,6 +36,7 @@ export async function initDatabase(db) {
   await createStorageTables(db);
   await createFileTables(db);
   await createFsMetaTables(db);
+  await createFsSearchIndexTables(db);
   await createMigrationTables(db);
   await createSystemTables(db);
   await createTasksTables(db);

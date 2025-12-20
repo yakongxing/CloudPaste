@@ -41,20 +41,29 @@
       <!-- 移动端文件大小显示 -->
       <div class="file-item__size-mobile" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
         <span v-if="item.isDirectory && item.isVirtual">-</span>
-        <span v-else>{{ formatFileSize(item.size || 0) }}</span>
+        <span v-else :title="sizeTitle">
+          {{ formatSize(item.size) }}
+          <span v-if="sizeMarker" class="file-item__meta-marker">{{ sizeMarker }}</span>
+        </span>
       </div>
     </div>
 
     <!-- 文件大小（桌面端） -->
     <div class="file-item__size" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
       <span v-if="item.isDirectory && item.isVirtual">-</span>
-      <span v-else>{{ formatFileSize(item.size || 0) }}</span>
+      <span v-else :title="sizeTitle">
+        {{ formatSize(item.size) }}
+        <span v-if="sizeMarker" class="file-item__meta-marker">{{ sizeMarker }}</span>
+      </span>
     </div>
 
     <!-- 修改时间（桌面端） -->
     <div class="file-item__time" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
       <span v-if="item.isDirectory && item.isVirtual">-</span>
-      <span v-else>{{ formatDate(item.modified) }}</span>
+      <span v-else :title="modifiedTitle">
+        {{ formatDate(item.modified) }}
+        <span v-if="modifiedMarker" class="file-item__meta-marker">{{ modifiedMarker }}</span>
+      </span>
     </div>
 
     <!-- 操作按钮 (根据设置显示/隐藏) -->
@@ -168,11 +177,51 @@ const handleContextMenu = (event) => {
   emit("contextmenu", { event, item: props.item });
 };
 
+const isValidSize = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
+
 // 格式化日期
 const formatDate = (dateString) => {
   if (!dateString) return "-";
   return formatDateTime(dateString);
 };
+
+// 格式化大小：未知则显示 "-"
+const formatSize = (value) => {
+  if (!isValidSize(value)) return "-";
+  return formatFileSize(value);
+};
+
+const sizeMarker = computed(() => {
+  if (!props.item?.isDirectory || props.item?.isVirtual) return "";
+  if (!isValidSize(props.item?.size)) return "";
+  if (props.item?.size_source === "index") return "≈";
+  if (props.item?.size_source === "compute") return "*";
+  return "";
+});
+
+const sizeTitle = computed(() => {
+  if (!props.item?.isDirectory || props.item?.isVirtual) return undefined;
+  if (!isValidSize(props.item?.size)) return undefined;
+  if (props.item?.size_source === "index") return "索引计算（无法实时）";
+  if (props.item?.size_source === "compute") return "递归计算（性能损耗）";
+  return undefined;
+});
+
+const modifiedMarker = computed(() => {
+  if (!props.item?.isDirectory || props.item?.isVirtual) return "";
+  if (!props.item?.modified) return "";
+  if (props.item?.modified_source === "index") return "≈";
+  if (props.item?.modified_source === "compute") return "*";
+  return "";
+});
+
+const modifiedTitle = computed(() => {
+  if (!props.item?.isDirectory || props.item?.isVirtual) return undefined;
+  if (!props.item?.modified) return undefined;
+  if (props.item?.modified_source === "index") return "时间来自索引兜底（不一定实时）";
+  if (props.item?.modified_source === "compute") return "时间来自递归计算（可能较慢）";
+  return undefined;
+});
 </script>
 
 <style scoped>
@@ -233,6 +282,12 @@ const formatDate = (dateString) => {
   .file-item:has(.file-item__checkbox):has(.file-item__actions) {
     grid-template-columns: auto var(--explorer-icon-size, 20px) 1fr 6rem 9rem auto;
   }
+}
+
+.file-item__meta-marker {
+  margin-left: 4px;
+  font-size: 0.75em;
+  opacity: 0.7;
 }
 
 /* 亮色模式 hover */

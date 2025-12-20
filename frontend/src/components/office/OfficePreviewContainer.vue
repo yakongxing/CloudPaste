@@ -79,7 +79,7 @@
 
         <!-- iframe 加载中遮罩 -->
         <div v-if="iframeLoading" class="loading-overlay">
-          <div class="animate-spin h-8 w-8 text-blue-500 rounded-full border-4 border-current border-t-transparent" aria-hidden="true" />
+          <LoadingIndicator size="xl" icon-class="text-blue-500" />
         </div>
       </div>
 
@@ -116,6 +116,7 @@ import DocxViewer from "./DocxViewer.vue";
 import XlsxViewer from "./XlsxViewer.vue";
 import PptxViewer from "./PptxViewer.vue";
 import { IconDocumentText } from "@/components/icons";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 
 const { t } = useI18n();
 

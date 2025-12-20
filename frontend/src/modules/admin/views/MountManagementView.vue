@@ -8,7 +8,7 @@ import ViewModeToggle from "@/components/common/ViewModeToggle.vue";
 import { useMountManagement } from "@/modules/admin/storage/useMountManagement.js";
 import { useThemeMode } from "@/composables/core/useThemeMode.js";
 import { useConfirmDialog } from "@/composables/core/useConfirmDialog.js";
-import { IconArchive, IconCalendar, IconCheckCircle, IconClock, IconDelete, IconEye, IconFolder, IconFolderPlus, IconGlobeAlt, IconInformationCircle, IconRefresh, IconRename, IconSearch, IconShieldCheck, IconUser, IconXCircle } from "@/components/icons";
+import { IconArchive, IconCalculator, IconCalendar, IconCheckCircle, IconClock, IconDelete, IconEye, IconFolder, IconFolderPlus, IconGlobeAlt, IconInformationCircle, IconRefresh, IconRename, IconSearch, IconShieldCheck, IconUser, IconXCircle } from "@/components/icons";
 
 /**
  * 挂载管理视图
@@ -277,7 +277,11 @@ onMounted(() => {
                           :class="darkMode ? 'bg-green-900/50 text-green-200' : 'bg-green-100 text-green-800'">
                       {{ $t("admin.mount.status.signature") }}
                     </span>
-                    <span v-if="!mount.web_proxy && !mount.enable_sign" class="text-xs" :class="darkMode ? 'text-gray-500' : 'text-gray-400'">-</span>
+                    <span v-if="mount.enable_folder_summary_compute" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                          :class="darkMode ? 'bg-purple-900/50 text-purple-200' : 'bg-purple-100 text-purple-800'">
+                      {{ $t("admin.mount.status.folderSummary") }}
+                    </span>
+                    <span v-if="!mount.web_proxy && !mount.enable_sign && !mount.enable_folder_summary_compute" class="text-xs" :class="darkMode ? 'text-gray-500' : 'text-gray-400'">-</span>
                   </div>
                 </td>
                 <!-- 创建时间 -->
@@ -351,11 +355,13 @@ onMounted(() => {
                 <div class="mb-2 text-sm font-mono" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">{{ mount.mount_path }}</div>
                 <div class="mb-2 text-sm" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">{{ formatStorageType(mount) }}</div>
                 <div v-if="mount.remark" class="mb-2 text-sm truncate" :class="darkMode ? 'text-gray-400' : 'text-gray-500'" :title="mount.remark">{{ mount.remark }}</div>
-                <div v-if="mount.web_proxy || mount.enable_sign" class="mb-2 flex flex-wrap gap-1">
+                <div v-if="mount.web_proxy || mount.enable_sign || mount.enable_folder_summary_compute" class="mb-2 flex flex-wrap gap-1">
                   <span v-if="mount.web_proxy" class="inline-flex items-center px-2 py-0.5 rounded text-xs"
                         :class="darkMode ? 'bg-blue-900/50 text-blue-200' : 'bg-blue-100 text-blue-800'">{{ $t("admin.mount.status.proxy") }}</span>
                   <span v-if="mount.enable_sign" class="inline-flex items-center px-2 py-0.5 rounded text-xs"
                         :class="darkMode ? 'bg-green-900/50 text-green-200' : 'bg-green-100 text-green-800'">{{ $t("admin.mount.status.signature") }}</span>
+                  <span v-if="mount.enable_folder_summary_compute" class="inline-flex items-center px-2 py-0.5 rounded text-xs"
+                        :class="darkMode ? 'bg-purple-900/50 text-purple-200' : 'bg-purple-100 text-purple-800'">{{ $t("admin.mount.status.folderSummary") }}</span>
                 </div>
               </div>
               <div class="flex justify-end space-x-2 mt-3">
@@ -462,7 +468,7 @@ onMounted(() => {
             <!-- 卡片底部信息区 -->
             <div>
               <!-- 代理和签名状态 -->
-              <div v-if="mount.web_proxy" class="mb-2 flex flex-wrap gap-1">
+              <div v-if="mount.web_proxy || mount.enable_folder_summary_compute" class="mb-2 flex flex-wrap gap-1">
                 <span
                   class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
                   :class="darkMode ? 'bg-blue-900/50 text-blue-200 border border-blue-800/50' : 'bg-blue-100 text-blue-800 border border-blue-200'"
@@ -477,6 +483,14 @@ onMounted(() => {
                 >
                   <IconShieldCheck class="w-3 h-3 mr-1" />
                   {{ $t("admin.mount.status.signature") }}
+                </span>
+                <span
+                  v-if="mount.enable_folder_summary_compute"
+                  class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                  :class="darkMode ? 'bg-purple-900/50 text-purple-200 border border-purple-800/50' : 'bg-purple-100 text-purple-800 border border-purple-200'"
+                >
+                  <IconCalculator class="w-3 h-3 mr-1" />
+                  {{ $t("admin.mount.status.folderSummary") }}
                 </span>
               </div>
 

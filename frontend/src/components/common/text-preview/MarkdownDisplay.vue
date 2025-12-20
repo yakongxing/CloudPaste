@@ -5,12 +5,12 @@
 
     <!-- 加载状态覆盖层 -->
     <div v-if="loading" class="loading-overlay">
-      <div
-        class="animate-spin h-8 w-8 mb-4 rounded-full border-4 border-current border-t-transparent"
-        :class="darkMode ? 'text-primary-500' : 'text-primary-600'"
-        aria-hidden="true"
+      <LoadingIndicator
+        :text="$t('textPreview.loadingMarkdown')"
+        :dark-mode="darkMode"
+        size="xl"
+        :icon-class="darkMode ? 'text-primary-500' : 'text-primary-600'"
       />
-      <p class="loading-text">{{ $t("textPreview.loadingMarkdown") }}</p>
     </div>
 
     <!-- 错误状态覆盖层 -->
@@ -24,6 +24,7 @@
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 import { loadVditor, VDITOR_ASSETS_BASE } from "@/utils/vditorLoader.js";
 
 const { t } = useI18n();
