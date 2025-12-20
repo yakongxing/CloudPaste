@@ -689,21 +689,26 @@ export const registerBrowseRoutes = (router, helpers) => {
     const fileSystem = new FileSystem(mountManager);
     const result = await fileSystem.getFileInfo(path, userIdOrInfo, userType, c.req.raw);
 
-    // 通过 LinkService 生成语义清晰的预览/下载入口
-    const linkService = new LinkService(db, encryptionSecret, repositoryFactory);
-    const previewLink = await linkService.getFsExternalLink(path, userIdOrInfo, userType, {
-      forceDownload: false,
-      request: c.req.raw,
-    });
+    // 目录不生成直链
+    let previewLink = { url: null, kind: null };
+    let downloadLink = { url: null, kind: null };
+    if (!result?.isDirectory) {
+      // 通过 LinkService 生成语义清晰的预览/下载入口
+      const linkService = new LinkService(db, encryptionSecret, repositoryFactory);
+      previewLink = await linkService.getFsExternalLink(path, userIdOrInfo, userType, {
+        forceDownload: false,
+        request: c.req.raw,
+      });
 
-    const downloadLink = await linkService.getFsExternalLink(path, userIdOrInfo, userType, {
-      forceDownload: true,
-      request: c.req.raw,
-    });
+      downloadLink = await linkService.getFsExternalLink(path, userIdOrInfo, userType, {
+        forceDownload: true,
+        request: c.req.raw,
+      });
+    }
 
-    const previewUrl = previewLink.url || null;
-    const downloadUrl = downloadLink.url || null;
-    const linkType = previewLink.kind;
+    const previewUrl = previewLink?.url || null;
+    const downloadUrl = downloadLink?.url || null;
+    const linkType = previewLink?.kind || null;
 
     const responsePayload = {
       ...result,
@@ -712,21 +717,23 @@ export const registerBrowseRoutes = (router, helpers) => {
       linkType,
     };
 
-    const documentPreview = await resolveDocumentPreview(
-      {
-        type: responsePayload.type,
-        typeName: responsePayload.typeName,
-        mimetype: responsePayload.mimetype,
-        filename: responsePayload.name,
-        name: responsePayload.name,
-        size: responsePayload.size,
-      },
-      {
-        previewUrl,
-        linkType,
-        use_proxy: responsePayload.use_proxy ?? 0,
-      },
-    );
+    const documentPreview = result?.isDirectory
+      ? null
+      : await resolveDocumentPreview(
+          {
+            type: responsePayload.type,
+            typeName: responsePayload.typeName,
+            mimetype: responsePayload.mimetype,
+            filename: responsePayload.name,
+            name: responsePayload.name,
+            size: responsePayload.size,
+          },
+          {
+            previewUrl,
+            linkType,
+            use_proxy: responsePayload.use_proxy ?? 0,
+          },
+        );
 
     return jsonOk(
       c,
@@ -776,6 +783,13 @@ export const registerBrowseRoutes = (router, helpers) => {
       }
     }
 
+    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory, { env: c.env });
+    const fileSystem = new FileSystem(mountManager);
+    const fileInfo = await fileSystem.getFileInfo(path, userIdOrInfo, userType, c.req.raw);
+    if (fileInfo?.isDirectory) {
+      throw new ValidationError("目录不支持下载");
+    }
+
     const linkService = new LinkService(db, encryptionSecret, repositoryFactory);
     const link = await linkService.getFsExternalLink(path, userIdOrInfo, userType, {
       forceDownload: true,
@@ -788,7 +802,6 @@ export const registerBrowseRoutes = (router, helpers) => {
     }
 
     // 未能生成任何 URL 时兜底：使用 StorageStreaming 层做服务端流式下载
-    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory, { env: c.env });
     const streaming = new StorageStreaming({
       mountManager,
       storageFactory: null,
@@ -912,6 +925,13 @@ export const registerBrowseRoutes = (router, helpers) => {
           ApiStatus.FORBIDDEN,
         );
       }
+    }
+
+    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory, { env: c.env });
+    const fileSystem = new FileSystem(mountManager);
+    const fileInfo = await fileSystem.getFileInfo(path, userIdOrInfo, userType, c.req.raw);
+    if (fileInfo?.isDirectory) {
+      throw new ValidationError("目录不支持生成文件直链");
     }
 
     const linkService = new LinkService(db, encryptionSecret, repositoryFactory);

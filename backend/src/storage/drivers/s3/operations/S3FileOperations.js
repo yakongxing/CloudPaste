@@ -261,6 +261,12 @@ export class S3FileOperations {
 
     return handleFsError(
       async () => {
+        const rawPath = typeof s3SubPath === "string" ? s3SubPath : "";
+        const trimmedPath = rawPath.trim();
+        if (!trimmedPath || trimmedPath.endsWith("/")) {
+          throw new ValidationError("目录不支持生成下载链接");
+        }
+
         const cacheOptions = {
           userType,
           userId,
