@@ -10,6 +10,7 @@ import { registerTaskHandlers } from "./src/storage/fs/tasks/registerHandlers.js
 import { registerJobTypes, validateJobTypesConsistency } from "./src/storage/fs/tasks/registerJobTypes.js";
 import { registerScheduledHandlers } from "./src/scheduled/ScheduledTaskRegistry.js";
 import { runDueScheduledJobs } from "./src/scheduled/runDueScheduledJobs.js";
+import { upsertSchedulerTickState } from "./src/services/schedulerTickerStateService.js";
 
 // 在模块加载时注册所有任务处理器和调度任务处理器
 registerTaskHandlers();
@@ -104,6 +105,11 @@ export default {
       console.log("[scheduled] Cloudflare scheduled 触发，开始检查到期后台任务...", new Date().toISOString());
 
       await ensureDbReadyOnce(env);
+      // 记录“真实触发发生”的证据
+      await upsertSchedulerTickState(env.DB, {
+        lastMs: Date.now(),
+        lastCron: controller?.cron ? String(controller.cron) : null,
+      });
       await runDueScheduledJobs(env.DB, env);
     } catch (error) {
       console.error("[scheduled] 执行维护任务时发生错误:", error);
@@ -160,6 +166,11 @@ if (!isCloudflareWorkers) {
 
         const startedMs = Date.now();
         try {
+          // 记录“真实触发发生”的证据
+          await upsertSchedulerTickState(sqliteAdapter, {
+            lastMs: startedMs,
+            lastCron: cronExpr,
+          });
           await runDueScheduledJobs(sqliteAdapter, bindings);
         } catch (error) {
           const durationMs = Date.now() - startedMs;

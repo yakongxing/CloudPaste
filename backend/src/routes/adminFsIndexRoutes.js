@@ -42,21 +42,12 @@ adminFsIndexRoutes.get("/api/admin/fs/index/status", requireAdmin, async (c) => 
   // - pending：已创建但可能尚未被 Workflows 拉起
   // - running：正在执行
   // 同时查询 rebuild 和 apply-dirty 两种类型
-  const [rebuildPendingResult, rebuildRunningResult, applyDirtyPendingResult, applyDirtyRunningResult] =
-    await Promise.all([
-      fileSystem.listJobs({ taskType: "fs_index_rebuild", status: "pending", limit: 50, offset: 0 }, adminId, UserType.ADMIN),
-      fileSystem.listJobs({ taskType: "fs_index_rebuild", status: "running", limit: 50, offset: 0 }, adminId, UserType.ADMIN),
-      fileSystem.listJobs(
-        { taskType: "fs_index_apply_dirty", status: "pending", limit: 50, offset: 0 },
-        adminId,
-        UserType.ADMIN,
-      ),
-      fileSystem.listJobs(
-        { taskType: "fs_index_apply_dirty", status: "running", limit: 50, offset: 0 },
-        adminId,
-        UserType.ADMIN,
-      ),
-    ]);
+  const [rebuildPendingResult, rebuildRunningResult, applyDirtyPendingResult, applyDirtyRunningResult] = await Promise.all([
+    fileSystem.listJobs({ taskType: "fs_index_rebuild", status: "pending", limit: 50, offset: 0 }, adminId, UserType.ADMIN),
+    fileSystem.listJobs({ taskType: "fs_index_rebuild", status: "running", limit: 50, offset: 0 }, adminId, UserType.ADMIN),
+    fileSystem.listJobs({ taskType: "fs_index_apply_dirty", status: "pending", limit: 50, offset: 0 }, adminId, UserType.ADMIN),
+    fileSystem.listJobs({ taskType: "fs_index_apply_dirty", status: "running", limit: 50, offset: 0 }, adminId, UserType.ADMIN),
+  ]);
 
   const runningJobs = [
     ...(rebuildPendingResult?.jobs || []),
@@ -68,7 +59,7 @@ adminFsIndexRoutes.get("/api/admin/fs/index/status", requireAdmin, async (c) => 
   const items = mounts.map((mount) => {
     const id = String(mount?.id || "");
     const row = id ? states.get(id) : null;
-    const dirtyCount = id ? (dirtyCountMap.get(id) ?? 0) : 0;
+    const dirtyCount = id ? dirtyCountMap.get(id) ?? 0 : 0;
     const status = row?.status ?? "not_ready";
 
     // 给管理端一个“建议动作”，不在后端自动触发
@@ -113,7 +104,7 @@ adminFsIndexRoutes.get("/api/admin/fs/index/status", requireAdmin, async (c) => 
         dirtyRebuildThreshold: DIRTY_REBUILD_THRESHOLD,
       },
     },
-    "获取索引状态成功",
+    "获取索引状态成功"
   );
 });
 
@@ -251,7 +242,7 @@ adminFsIndexRoutes.post("/api/admin/fs/index/stop", requireAdmin, async (c) => {
         SELECT task_id, task_type, status, created_at, started_at, finished_at, updated_at, error_message
         FROM ${DbTables.TASKS}
         WHERE task_id = ?
-      `,
+      `
       )
       .bind(jobId)
       .first();
@@ -292,7 +283,7 @@ adminFsIndexRoutes.post("/api/admin/fs/index/stop", requireAdmin, async (c) => {
         message: "只能取消待执行或执行中的任务",
         data: { jobId, mountIds, diagnostic },
       },
-      ApiStatus.BAD_REQUEST,
+      ApiStatus.BAD_REQUEST
     );
   }
 
@@ -305,7 +296,7 @@ adminFsIndexRoutes.post("/api/admin/fs/index/stop", requireAdmin, async (c) => {
         message: "无权取消此任务",
         data: { jobId, mountIds, diagnostic },
       },
-      ApiStatus.FORBIDDEN,
+      ApiStatus.FORBIDDEN
     );
   }
 
@@ -320,7 +311,7 @@ adminFsIndexRoutes.post("/api/admin/fs/index/stop", requireAdmin, async (c) => {
         message: e?.message || "取消失败",
         data: { jobId, mountIds, diagnostic },
       },
-      e?.status || ApiStatus.INTERNAL_ERROR,
+      e?.status || ApiStatus.INTERNAL_ERROR
     );
   }
 
@@ -346,11 +337,7 @@ adminFsIndexRoutes.post("/api/admin/fs/index/clear", requireAdmin, async (c) => 
 
   // 不提供 mountIds：全量清空（派生数据），state 也清空（缺失即视为 not_ready）
   if (mountIdsRaw === null || mountIdsRaw === undefined) {
-    await db.batch([
-      db.prepare("DELETE FROM fs_search_index_entries"),
-      db.prepare("DELETE FROM fs_search_index_dirty"),
-      db.prepare("DELETE FROM fs_search_index_state"),
-    ]);
+    await db.batch([db.prepare("DELETE FROM fs_search_index_entries"), db.prepare("DELETE FROM fs_search_index_dirty"), db.prepare("DELETE FROM fs_search_index_state")]);
     return jsonOk(c, { scope: "all" }, "索引已清空（需重新重建）");
   }
 

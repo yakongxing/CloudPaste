@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, h } from "vue";
+import { ref, computed, onMounted, onUnmounted, h, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { useScheduledJobs } from "@/modules/admin/composables/useScheduledJobs";
@@ -18,6 +18,13 @@ const { isDarkMode: darkMode } = useThemeMode();
 // 全局时钟：用于实时更新相对时间显示（倒计时）
 const currentTick = ref(0);
 let tickTimer = null;
+let schedulerTickerAutoRefreshTimer = null;
+
+// 与服务端时间对齐
+// - /api/admin/scheduled/ticker 会返回 nowMs（服务端当前毫秒）
+// - offset = serverNowMs - clientNowMs
+const schedulerClockOffsetMs = ref(0);
+const schedulerClockHasSync = ref(false);
 
 onMounted(async () => {
   // 启动全局时钟，每秒更新一次（用于倒计时实时显示）
@@ -29,7 +36,7 @@ onMounted(async () => {
   loadSettings();
   
   // 初始化数据加载
-  await Promise.all([loadJobs(), loadHandlerTypes(), loadAnalytics()]);
+  await Promise.all([loadJobs(), loadHandlerTypes(), loadAnalytics(), loadSchedulerTicker()]);
 });
 
 onUnmounted(() => {
@@ -37,6 +44,11 @@ onUnmounted(() => {
   if (tickTimer) {
     clearInterval(tickTimer);
     tickTimer = null;
+  }
+
+  if (schedulerTickerAutoRefreshTimer) {
+    clearTimeout(schedulerTickerAutoRefreshTimer);
+    schedulerTickerAutoRefreshTimer = null;
   }
 });
 
@@ -59,6 +71,9 @@ const {
   loadJobs, toggleJobEnabled, deleteJob, runJobNow, loadJobRuns, loadHandlerTypes,
   formatSchedule, formatInterval,
   loadHourlyAnalytics,
+  schedulerTicker,
+  schedulerTickerLoading,
+  loadSchedulerTicker,
 } = useScheduledJobs();
 
 // 路由导航函数
@@ -79,6 +94,13 @@ const displayedJobs = computed(() => {
   if (!searchQuery.value) return filteredJobs.value;
   const query = searchQuery.value.toLowerCase();
   return filteredJobs.value.filter((job) => job.taskId.toLowerCase().includes(query));
+});
+
+
+// 这里每秒生成一个新的数组引用，触发表格组件重新渲染
+const displayedJobsForTable = computed(() => {
+  const _ = currentTick.value;
+  return Array.isArray(displayedJobs.value) ? displayedJobs.value.slice() : [];
 });
 
 // 选择处理
@@ -257,6 +279,242 @@ const formatNextRun = (job) => {
   return formatRelativeTime(job.nextRunAfter);
 };
 
+// ==================== 平台触发器倒计时（Cloudflare/Docker） ====================
+
+// 用“服务端时间 + offset”作为倒计时的当前时间
+const getSchedulerNowMs = () => {
+  const _ = currentTick.value;
+  const base = Date.now();
+  return schedulerClockHasSync.value ? base + schedulerClockOffsetMs.value : base;
+};
+
+const formatCountdown = (targetIso) => {
+  const _ = currentTick.value;
+
+  if (!targetIso) return "-";
+  const target = new Date(targetIso);
+  if (Number.isNaN(target.getTime())) return "-";
+  const nowMs = getSchedulerNowMs();
+  const diffMs = target.getTime() - nowMs;
+
+  if (diffMs <= 0) {
+    return t("admin.scheduledJobs.ticker.waiting");
+  }
+
+  const totalSec = Math.floor(diffMs / 1000);
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+
+  const pad2 = (n) => String(n).padStart(2, "0");
+  if (hours > 0) {
+    return `${hours}:${pad2(minutes)}:${pad2(seconds)}`;
+  }
+  return `${minutes}:${pad2(seconds)}`;
+};
+
+// “必须跟真实触发一致”的显示状态：锁住某一轮的 nextAt，直到 lastTick 变化
+const schedulerTickerUiState = ref({
+  lastTickMs: null,
+  nextAt: null,
+  waitingSinceMs: null,
+});
+
+const normalizeLastTickMs = (data) => {
+  const ms = data?.lastTick?.ms;
+  return typeof ms === "number" && Number.isFinite(ms) && ms > 0 ? ms : null;
+};
+
+const normalizeNextAt = (data) => {
+  const at = data?.nextTick?.at;
+  return typeof at === "string" && at ? at : null;
+};
+
+const syncSchedulerTickerUiState = (data) => {
+  const incomingLastTickMs = normalizeLastTickMs(data);
+  const incomingNextAt = normalizeNextAt(data);
+
+  const prev = schedulerTickerUiState.value;
+
+  // 首次加载：直接接收接口返回
+  if (prev.nextAt === null && prev.lastTickMs === null) {
+    schedulerTickerUiState.value = {
+      lastTickMs: incomingLastTickMs,
+      nextAt: incomingNextAt,
+      waitingSinceMs: null,
+    };
+    return;
+  }
+
+  // 如果真实触发发生了（lastTick 变化），进入下一轮：接收新的 nextAt
+  if (incomingLastTickMs && incomingLastTickMs !== prev.lastTickMs) {
+    schedulerTickerUiState.value = {
+      lastTickMs: incomingLastTickMs,
+      nextAt: incomingNextAt,
+      waitingSinceMs: null,
+    };
+    return;
+  }
+
+  // 如果正在“等待触发”，不允许 nextAt 在刷新时跳到下一轮（避免“没触发也重置”）
+  if (prev.waitingSinceMs) {
+    return;
+  }
+
+  // 正常倒计时中：允许 nextAt 更新（例如 cron 配置变更）
+  schedulerTickerUiState.value = {
+    lastTickMs: prev.lastTickMs ?? incomingLastTickMs,
+    nextAt: incomingNextAt,
+    waitingSinceMs: null,
+  };
+};
+
+const schedulerTickerSummary = computed(() => {
+  // 每秒刷新一次，确保倒计时实时变化
+  const _ = currentTick.value;
+
+  const data = schedulerTicker.value;
+  if (!data) {
+    return {
+      nextAt: null,
+      countdown: "-",
+      isDue: false,
+    };
+  }
+
+  const nextAt = schedulerTickerUiState.value.nextAt;
+  const lastTickMs = normalizeLastTickMs(data);
+  const hasAnyTickEvidence = Boolean(lastTickMs);
+  // Workers 第一次还没真实触发时：不显示“暂无数据”，直接提示“等待触发”
+  const countdown = nextAt
+    ? formatCountdown(nextAt)
+    : hasAnyTickEvidence
+      ? t("admin.scheduledJobs.ticker.noNext")
+      : t("admin.scheduledJobs.ticker.waiting");
+
+  return {
+    nextAt,
+    countdown,
+    isDue: Boolean(nextAt) && new Date(nextAt).getTime() <= getSchedulerNowMs(),
+  };
+});
+
+// 触发器刷新（用于校准）：同时刷新 ticker + jobs
+const handleTickerRefresh = async (options = {}) => {
+  const { silent = false, showErrorOnCatch = true } = options || {};
+
+  await Promise.all([
+    loadSchedulerTicker({ silent, showErrorOnCatch }),
+    loadJobs({}, { silent: true, showErrorOnCatch }),
+  ]);
+};
+
+/**
+ * 自动校准刷新
+ * - 倒计时到点后进入“等待触发”
+ * - 用退避策略刷新几次进行校准，直到 nextTick 跳到下一轮
+ */
+const dueRefreshState = ref({ active: false, attempt: 0 });
+const DUE_BACKOFF_MS = [1500, 3000, 6000, 12000, 30000];
+
+const stopDueRefreshLoop = () => {
+  dueRefreshState.value = { active: false, attempt: 0 };
+  if (schedulerTickerAutoRefreshTimer) {
+    clearTimeout(schedulerTickerAutoRefreshTimer);
+    schedulerTickerAutoRefreshTimer = null;
+  }
+};
+
+const scheduleDueRefreshAttempt = () => {
+  if (!dueRefreshState.value.active) return;
+
+  const attempt = dueRefreshState.value.attempt;
+  if (attempt >= DUE_BACKOFF_MS.length) {
+    stopDueRefreshLoop();
+    return;
+  }
+
+  const delay = DUE_BACKOFF_MS[attempt];
+  if (schedulerTickerAutoRefreshTimer) {
+    clearTimeout(schedulerTickerAutoRefreshTimer);
+  }
+  schedulerTickerAutoRefreshTimer = setTimeout(async () => {
+    try {
+      await handleTickerRefresh({ silent: true, showErrorOnCatch: false });
+    } catch {
+      // ignore
+    } finally {
+      const baselineLastTickMs = dueRefreshState.value.lastTickMs || null;
+      const currentLastTickMs = normalizeLastTickMs(schedulerTicker.value);
+      // 只有当“真实触发发生”（lastTick 变化）才停止自动校准
+      if (baselineLastTickMs !== currentLastTickMs && currentLastTickMs) {
+        stopDueRefreshLoop();
+        return;
+      }
+      dueRefreshState.value = {
+        active: true,
+        attempt: dueRefreshState.value.attempt + 1,
+        lastTickMs: baselineLastTickMs,
+      };
+      scheduleDueRefreshAttempt();
+    }
+  }, delay);
+};
+
+watch(
+  () => schedulerTickerSummary.value.isDue,
+  (isDue) => {
+    if (isDue) {
+      // 进入等待态：锁定显示，直到真实触发发生
+      if (!schedulerTickerUiState.value.waitingSinceMs) {
+        schedulerTickerUiState.value = {
+          ...schedulerTickerUiState.value,
+          waitingSinceMs: getSchedulerNowMs(),
+        };
+      }
+
+      if (!dueRefreshState.value.active) {
+        dueRefreshState.value = {
+          active: true,
+          attempt: 0,
+          lastTickMs: normalizeLastTickMs(schedulerTicker.value),
+        };
+        scheduleDueRefreshAttempt();
+      }
+    } else {
+      // 离开到点状态：清除等待锁
+      if (schedulerTickerUiState.value.waitingSinceMs) {
+        schedulerTickerUiState.value = {
+          ...schedulerTickerUiState.value,
+          waitingSinceMs: null,
+        };
+      }
+      stopDueRefreshLoop();
+    }
+  },
+  { immediate: true },
+);
+
+// ticker 数据变化时：同步 UI state
+watch(
+  () => schedulerTicker.value,
+  (data) => {
+    if (!data) return;
+    syncSchedulerTickerUiState(data);
+  },
+  { immediate: true },
+);
+
+// 每次拿到服务端 nowMs 后，更新 offset
+watch(
+  () => schedulerTicker.value?.nowMs || null,
+  (serverNowMs) => {
+    if (typeof serverNowMs !== "number") return;
+    schedulerClockOffsetMs.value = serverNowMs - Date.now();
+    schedulerClockHasSync.value = true;
+  },
+);
+
 // 批量操作
 const handleBatchEnable = async () => {
   for (const taskId of selectedJobs.value) {
@@ -290,7 +548,7 @@ const handleBatchDelete = async () => {
 
 // 操作处理
 const handleRefresh = async () => {
-  await Promise.all([loadJobs(), loadAnalytics()]);
+  await Promise.all([loadJobs(), loadAnalytics(), loadSchedulerTicker()]);
 };
 
 const handleToggleEnabled = async (job) => {
@@ -775,13 +1033,25 @@ const jobColumnClasses = {
           <div class="text-xl font-semibold" :class="darkMode ? 'text-yellow-400' : 'text-yellow-600'">{{ stats.pending }}</div>
         </div>
 
-        <!-- 运行中 -->
+        <!-- 预计下次触发时间（平台触发器） -->
         <div class="rounded-lg border p-3 shadow-sm" :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'">
-          <div class="text-xs font-medium mb-1 flex items-center gap-1" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
-            <span>{{ t('admin.scheduledJobs.stats.runningJobs') }}</span>
-            <span v-if="stats.running > 0" class="h-2 w-2 rounded-full bg-blue-500 animate-pulse"></span>
+          <div class="text-xs font-medium mb-1 flex items-center justify-between" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
+            <span>{{ t('admin.scheduledJobs.stats.nextTickCountdown') }}</span>
+            <!-- 刷新按钮（用于校准） -->
+            <button
+              type="button"
+              class="p-0.5 rounded transition disabled:opacity-50"
+              :class="darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'"
+              :disabled="schedulerTickerLoading"
+              @click="handleTickerRefresh"
+              :title="t('admin.scheduledJobs.ticker.refresh')"
+            >
+              <IconRefresh class="h-3 w-3" :class="{ 'animate-spin': schedulerTickerLoading }" />
+            </button>
           </div>
-          <div class="text-xl font-semibold" :class="darkMode ? 'text-blue-400' : 'text-blue-600'">{{ stats.running }}</div>
+          <div class="text-xl font-semibold" :class="darkMode ? 'text-blue-400' : 'text-blue-600'">
+            {{ schedulerTickerLoading ? '...' : schedulerTickerSummary.countdown }}
+          </div>
         </div>
       </div>
       </div>
@@ -797,7 +1067,7 @@ const jobColumnClasses = {
       <!-- AdminTable 组件 -->
       <AdminTable
         v-else
-        :data="displayedJobs"
+        :data="displayedJobsForTable"
         :columns="jobColumns"
         :column-classes="jobColumnClasses"
         :selectable="true"
