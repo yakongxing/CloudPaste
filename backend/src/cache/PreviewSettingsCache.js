@@ -14,6 +14,7 @@ export class PreviewSettingsCache {
   constructor() {
     this.cache = new Map();
     this.typeCache = new Map();
+    this.providerTypeCache = new Map();
     this.lastUpdate = null;
     this.ttl = Infinity;
     this._isLoaded = false;
@@ -27,7 +28,8 @@ export class PreviewSettingsCache {
    */
   async getFileType(extension, db = null) {
     await this.ensureLoaded(db);
-    return this.typeCache.get(extension.toLowerCase()) || "unknown";
+    const key = extension.toLowerCase();
+    return this.typeCache.get(key) || this.providerTypeCache.get(key) || "unknown";
   }
 
   /**
@@ -69,6 +71,7 @@ export class PreviewSettingsCache {
       // 清空现有缓存
       this.cache.clear();
       this.typeCache.clear();
+      this.providerTypeCache.clear();
 
       // 重建缓存
       for (const setting of previewSettings) {
@@ -80,6 +83,8 @@ export class PreviewSettingsCache {
           this.parseAndCacheExtensions(typeCategory, setting.value);
         }
       }
+
+      this.rebuildProviderTypeCache();
 
       this.lastUpdate = Date.now();
       this._isLoaded = true;
@@ -124,6 +129,47 @@ export class PreviewSettingsCache {
   }
 
   /**
+   * 解析 preview_providers 规则并建立类型映射（用于 office/document 等分类）
+   */
+  rebuildProviderTypeCache() {
+    const rules = this.getPreviewProvidersConfig();
+    if (!Array.isArray(rules)) return;
+
+    for (const rule of rules) {
+      const category = this.resolveProviderCategory(rule);
+      if (!category) continue;
+
+      const match = rule?.match || {};
+      const extList = this.normalizeExtensionList(match.ext || match.exts || match.extensions);
+      if (!extList.length) continue;
+
+      for (const ext of extList) {
+        this.providerTypeCache.set(ext, category);
+      }
+    }
+  }
+
+  normalizeExtensionList(value) {
+    if (!value) return [];
+    const list = Array.isArray(value) ? value : String(value).split(",");
+    return list
+      .map((ext) => String(ext).trim().toLowerCase())
+      .filter((ext) => ext.length > 0 && /^[a-z0-9]+$/.test(ext));
+  }
+
+  resolveProviderCategory(rule) {
+    const explicit = (rule?.category || rule?.fileType || "").toString().toLowerCase();
+    if (explicit) return explicit;
+
+    const previewKey = (rule?.previewKey || rule?.key || "").toString().toLowerCase();
+    if (["text", "code", "markdown", "html"].includes(previewKey)) return "text";
+    if (["image", "video", "audio"].includes(previewKey)) return previewKey;
+    if (previewKey === "office") return "office";
+    if (["pdf", "document"].includes(previewKey)) return "document";
+    return "";
+  }
+
+  /**
    * 获取原始设置值
    * @param {string} key - 设置键名
    * @returns {string|null} 设置值
@@ -133,26 +179,26 @@ export class PreviewSettingsCache {
   }
 
   /**
-   * 获取 DocumentApp 模板配置（JSON 对象）
-   * @returns {Object|null} 解析后的配置对象
+   * 获取 Preview Providers 配置（JSON 数组）
+   * @returns {Array|null}
    */
-  getDocumentAppsConfig() {
-    const raw = this.getSetting("preview_document_apps");
+  getPreviewProvidersConfig() {
+    const raw = this.getSetting("preview_providers");
     if (!raw || typeof raw !== "string" || raw.trim().length === 0) {
-      return null;
+      return [];
     }
 
     try {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object") {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     } catch (e) {
-      console.error("解析 preview_document_apps 配置失败，将视为未配置:", e);
-      return null;
+      console.error("解析 preview_providers 配置失败，将视为未配置:", e);
+      return [];
     }
 
-    return null;
+    return [];
   }
 
   /**

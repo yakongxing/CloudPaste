@@ -377,6 +377,18 @@
           />
         </div>
 
+        <!-- iframe 预览 -->
+        <div v-else-if="isIframe" class="iframe-preview h-[600px]">
+          <IframePreview
+            :providers="iframeProviders"
+            :dark-mode="darkMode"
+            :loading-text="t('mount.filePreview.loadingPreview')"
+            :error-text="t('mount.filePreview.previewError')"
+            @load="handleContentLoaded"
+            @error="handleContentError"
+          />
+        </div>
+
         <!-- Markdown预览 - 使用TextRenderer统一处理 -->
         <div v-else-if="isMarkdown" :class="isContentFullscreen ? 'fullscreen-text-container' : ''">
           <TextPreview
@@ -456,18 +468,18 @@ import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { IconCollapse, IconDocument, IconDownload, IconError, IconExclamationSolid, IconExpand, IconEye, IconLink, IconRefresh, IconSave } from "@/components/icons";
 import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
-import { usePreviewRenderers, useFilePreviewExtensions, useFileSave } from "@/composables/index.js";
+import { usePreviewRenderers, useFilePreviewExtensions, useFileSave, resolvePreviewSelection, PREVIEW_KEYS } from "@/composables/index.js";
 import { usePathPassword } from "@/composables/usePathPassword.js";
 import { useAuthStore } from "@/stores/authStore.js";
 import { useFsService } from "@/modules/fs/fsService.js";
 import { getPreviewModeFromFilename, PREVIEW_MODES, SUPPORTED_ENCODINGS } from "@/utils/textUtils.js";
-import { isArchiveFile } from "@/utils/fileTypes.js";
 import AudioPreview from "./AudioPreview.vue";
 import VideoPreview from "./VideoPreview.vue";
 import TextPreview from "./TextPreview.vue";
 import ArchivePreview from "./ArchivePreview.vue";
 import PdfFsPreview from "./PdfFsPreview.vue";
 import OfficeFsPreview from "./OfficeFsPreview.vue";
+import IframePreview from "@/components/common/IframePreview.vue";
 import { LivePhotoViewer } from "@/components/common/LivePhoto";
 import { detectLivePhoto, isLivePhotoImage } from "@/utils/livePhotoUtils.js";
 
@@ -559,14 +571,6 @@ const {
   officePreviewError,
   isOfficeFullscreen,
 
-  // 模板中使用的计算属性
-  isImage,
-  isVideo,
-  isAudio,
-  isPdf,
-  isOffice,
-  isText,
-
   // 模板中使用的DOM引用
   officePreviewRef,
 
@@ -577,17 +581,39 @@ const {
   updateOfficePreviewUrls,
   handleContentLoaded,
   handleContentError,
+} = renderers;
 
-  // 渲染器中的方法
+const resolvedPreview = computed(() => resolvePreviewSelection({ file: props.file }));
+
+const previewKey = computed(() => resolvedPreview.value.key);
+const iframeProviders = computed(() => resolvedPreview.value.providers || {});
+
+const isImage = computed(() => previewKey.value === PREVIEW_KEYS.IMAGE);
+const isVideo = computed(() => previewKey.value === PREVIEW_KEYS.VIDEO);
+const isAudio = computed(() => previewKey.value === PREVIEW_KEYS.AUDIO);
+const isPdf = computed(() => previewKey.value === PREVIEW_KEYS.PDF);
+const isOffice = computed(() => previewKey.value === PREVIEW_KEYS.OFFICE);
+const isIframe = computed(() => previewKey.value === PREVIEW_KEYS.IFRAME);
+const isArchive = computed(() => previewKey.value === PREVIEW_KEYS.ARCHIVE);
+const isMarkdown = computed(() => previewKey.value === PREVIEW_KEYS.MARKDOWN);
+const isText = computed(() =>
+  [PREVIEW_KEYS.TEXT, PREVIEW_KEYS.CODE, PREVIEW_KEYS.MARKDOWN, PREVIEW_KEYS.HTML].includes(previewKey.value)
+);
+
+// 从扩展功能中解构保留的功能
+const {
+  isGeneratingPreview,
+  handleDownload,
+  handleS3DirectPreview,
+  getCurrentDirectoryPath,
+  isCreatingShare,
+  handleCreateShare,
   handleOfficePreviewLoaded,
   handleOfficePreviewError,
   handleAudioPlay,
   handleAudioPause,
   handleAudioError,
-} = renderers;
-
-// 从扩展功能中解构保留的功能
-const { isGeneratingPreview, handleDownload, handleS3DirectPreview, getCurrentDirectoryPath, isCreatingShare, handleCreateShare } = extensions;
+} = extensions;
 
 // 智能初始模式计算属性
 const smartInitialMode = computed(() => {
@@ -608,8 +634,11 @@ const selectedPdfProvider = ref("native");
 const pdfProviderOptions = computed(() => {
   const options = [];
 
-  // 始终添加原生预览选项
-  if (authenticatedPreviewUrl.value) {
+  const providers = resolvedPreview.value.providers || {};
+  const hasNativePlaceholder = Object.values(providers).some((v) => v === "native");
+
+  // 默认原生预览选项（当规则没有显式声明 native 占位时）
+  if (!hasNativePlaceholder && authenticatedPreviewUrl.value) {
     options.push({
       key: "native",
       label: t("mount.filePreview.browserNative"),
@@ -617,9 +646,18 @@ const pdfProviderOptions = computed(() => {
     });
   }
 
-  // 添加其他 provider（如 pdfjs）
-  const providers = props.file?.documentPreview?.providers || {};
+  // providers 中允许 url === "native" 的占位：表示走浏览器原生（与默认 native 同一条 URL）
   for (const [key, url] of Object.entries(providers)) {
+    if (!url) continue;
+    if (url === "native") {
+      if (!authenticatedPreviewUrl.value) continue;
+      options.push({
+        key,
+        label: key === "native" ? t("mount.filePreview.browserNative") : key,
+        url: authenticatedPreviewUrl.value,
+      });
+      continue;
+    }
     options.push({
       key,
       label: key === "pdfjs" ? t("mount.filePreview.pdfjsLabel") : key,
@@ -637,6 +675,22 @@ const currentPdfPreviewUrl = computed(() => {
   const current = options.find((opt) => opt.key === selectedPdfProvider.value) || options[0];
   return current.url || "";
 });
+
+watch(
+  pdfProviderOptions,
+  (options) => {
+    if (!options.length) {
+      selectedPdfProvider.value = "";
+      return;
+    }
+    // 当当前选中值不在 options 中时：优先 native（如果存在），否则选第一个
+    const exists = options.some((opt) => opt.key === selectedPdfProvider.value);
+    if (!exists) {
+      selectedPdfProvider.value = options.some((opt) => opt.key === "native") ? "native" : options[0].key;
+    }
+  },
+  { immediate: true },
+);
 
 // Office 预览状态管理
 const selectedOfficeProvider = ref("");
@@ -661,7 +715,7 @@ const officeContentUrl = computed(() => {
 // Office provider 选项
 const officeProviderOptions = computed(() => {
   const options = [];
-  const providers = props.file?.documentPreview?.providers || {};
+  const providers = resolvedPreview.value.providers || {};
 
   for (const [key, url] of Object.entries(providers)) {
     const labelKey = `mount.filePreview.officeProvider.${key}`;
@@ -832,19 +886,6 @@ const handleSaveFile = async () => {
     });
   }
 };
-
-// 添加缺失的计算属性
-const isMarkdown = computed(() => {
-  // 检查文件扩展名是否为markdown
-  const filename = props.file?.name || "";
-  const ext = filename.split(".").pop()?.toLowerCase();
-  return ["md", "markdown", "mdown", "mkd"].includes(ext);
-});
-
-// 压缩文件检测
-const isArchive = computed(() => {
-  return props.file?.name && isArchiveFile(props.file.name);
-});
 
 // Live Photo 检测
 const livePhotoData = computed(() => {

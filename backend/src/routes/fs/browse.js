@@ -6,7 +6,7 @@ import { getVirtualDirectoryListing, isVirtualPath } from "../../storage/fs/util
 import { createErrorResponse, getQueryBool, jsonOk } from "../../utils/common.js";
 import { getEncryptionSecret } from "../../utils/environmentUtils.js";
 import { LinkService } from "../../storage/link/LinkService.js";
-import { resolveDocumentPreview } from "../../services/documentPreviewService.js";
+import { resolvePreviewSelection } from "../../services/documentPreviewService.js";
 import { StorageStreaming, STREAMING_CHANNELS } from "../../storage/streaming/index.js";
 import { normalizePath as normalizeFsPath } from "../../storage/fs/utils/PathResolver.js";
 import { FsSearchIndexStore } from "../../storage/fs/search/FsSearchIndexStore.js";
@@ -717,9 +717,9 @@ export const registerBrowseRoutes = (router, helpers) => {
       linkType,
     };
 
-    const documentPreview = result?.isDirectory
+    const previewSelection = result?.isDirectory
       ? null
-      : await resolveDocumentPreview(
+      : await resolvePreviewSelection(
           {
             type: responsePayload.type,
             typeName: responsePayload.typeName,
@@ -730,6 +730,7 @@ export const registerBrowseRoutes = (router, helpers) => {
           },
           {
             previewUrl,
+            downloadUrl,
             linkType,
             use_proxy: responsePayload.use_proxy ?? 0,
           },
@@ -739,7 +740,7 @@ export const registerBrowseRoutes = (router, helpers) => {
       c,
       {
         ...responsePayload,
-        documentPreview,
+        previewSelection,
       },
       "获取文件信息成功",
     );

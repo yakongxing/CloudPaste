@@ -214,6 +214,14 @@ export default {
     audioPreview: {
       loadingAudio: "加载中...",
       audioPlayer: "音频播放器",
+      sendToGlobalPlayer: "发送到全局播放器",
+      playingInGlobalPlayer: "正在全局播放器中播放",
+      backToPreview: "返回",
+      closePlayer: "关闭播放器",
+      expandPlayer: "展开播放器",
+      collapsePlayer: "收起播放器",
+      unknownAudio: "未知音频",
+      unknownArtist: "未知艺术家",
     },
     videoPreview: {
       loadingVideo: "加载中...",

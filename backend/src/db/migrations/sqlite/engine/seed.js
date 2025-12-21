@@ -107,7 +107,7 @@ export async function addPreviewSettings(db) {
     {
       key: "preview_text_types",
       value:
-        "txt,htm,html,xml,java,properties,sql,js,md,json,conf,ini,vue,php,py,bat,yml,yaml,go,sh,c,cpp,h,hpp,tsx,vtt,srt,ass,rs,lrc,dockerfile,makefile,gitignore,license,readme",
+        "txt,htm,html,xml,java,properties,sql,js,md,json,conf,ini,vue,php,py,bat,yml,yaml,go,sh,c,cpp,h,hpp,tsx,vtt,srt,ass,rs,lrc,gitignore",
       description: "支持预览的文本文件扩展名，用逗号分隔",
       type: "textarea",
       group_id: 2,
@@ -142,43 +142,55 @@ export async function addPreviewSettings(db) {
       flags: 0,
     },
     {
-      key: "preview_office_types",
-      value: "doc,docx,xls,xlsx,ppt,pptx,rtf",
-      description: "支持预览的Office文档扩展名（需要在线转换），用逗号分隔",
-      type: "textarea",
-      group_id: 2,
-      sort_order: 5,
-      flags: 0,
-    },
-    {
-      key: "preview_document_types",
-      value: "pdf",
-      description: "支持预览的文档文件扩展名（可直接预览），用逗号分隔",
-      type: "textarea",
-      group_id: 2,
-      sort_order: 6,
-      flags: 0,
-    },
-    {
-      key: "preview_document_apps",
+      key: "preview_providers",
       value: JSON.stringify(
-        {
-          "doc,docx,xls,xlsx,ppt,pptx,rtf": {
-            microsoft: {
-              urlTemplate: "https://view.officeapps.live.com/op/view.aspx?src=$e_url",
-            },
-            google: {
-              urlTemplate: "https://docs.google.com/viewer?url=$e_url&embedded=true",
+        [
+          // 无后缀文件（README/LICENSE/Dockerfile/Makefile 等）兜底
+          {
+            id: "noext-text",
+            priority: 0,
+            match: { regex: "/^(readme|license|dockerfile|makefile)$/i" },
+            previewKey: "text",
+            providers: {},
+          },
+          {
+            id: "office-openxml",
+            priority: 0,
+            match: { ext: ["docx", "xlsx", "pptx"] },
+            previewKey: "office",
+            providers: {
+              native: "native",
+              microsoft: { urlTemplate: "https://view.officeapps.live.com/op/view.aspx?src=$e_url" },
+              google: { urlTemplate: "https://docs.google.com/viewer?url=$e_url&embedded=true" },
             },
           },
-        },
+          {
+            id: "office-legacy",
+            priority: 0,
+            match: { ext: ["doc", "xls", "ppt", "rtf"] },
+            previewKey: "office",
+            providers: {
+              microsoft: { urlTemplate: "https://view.officeapps.live.com/op/view.aspx?src=$e_url" },
+              google: { urlTemplate: "https://docs.google.com/viewer?url=$e_url&embedded=true" },
+            },
+          },
+          {
+            id: "pdf",
+            priority: 0,
+            match: { ext: ["pdf"] },
+            previewKey: "pdf",
+            providers: {
+              native: "native",
+            },
+          },
+        ],
         null,
         2,
       ),
-      description: "文档/Office 预览使用的 DocumentApp 模板配置，JSON 结构：按扩展名映射到各个预览服务的 URL 模板",
+      description: "预览规则配置（JSON 数组）：定义匹配条件、预览类型与 URL 模板",
       type: "textarea",
       group_id: 2,
-      sort_order: 7,
+      sort_order: 5,
       flags: 0,
     },
   ];
@@ -195,6 +207,84 @@ export async function addPreviewSettings(db) {
         .run();
     }
   }
+}
+
+export async function resetPreviewProvidersDefaults(db) {
+  console.log("开始重置 preview_providers 默认规则...");
+
+  const previewProvidersValue = JSON.stringify(
+    [
+      // 无后缀文件（README/LICENSE/Dockerfile/Makefile 等）兜底
+      {
+        id: "noext-text",
+        priority: 0,
+        match: { regex: "/^(readme|license|dockerfile|makefile)$/i" },
+        previewKey: "text",
+        providers: {},
+      },
+      {
+        id: "office-openxml",
+        priority: 0,
+        match: { ext: ["docx", "xlsx", "pptx"] },
+        previewKey: "office",
+        providers: {
+          native: "native",
+          microsoft: { urlTemplate: "https://view.officeapps.live.com/op/view.aspx?src=$e_url" },
+          google: { urlTemplate: "https://docs.google.com/viewer?url=$e_url&embedded=true" },
+        },
+      },
+      {
+        id: "office-legacy",
+        priority: 0,
+        match: { ext: ["doc", "xls", "ppt", "rtf"] },
+        previewKey: "office",
+        providers: {
+          microsoft: { urlTemplate: "https://view.officeapps.live.com/op/view.aspx?src=$e_url" },
+          google: { urlTemplate: "https://docs.google.com/viewer?url=$e_url&embedded=true" },
+        },
+      },
+      {
+        id: "pdf",
+        priority: 0,
+        match: { ext: ["pdf"] },
+        previewKey: "pdf",
+        providers: {
+          native: "native",
+        },
+      },
+    ],
+    null,
+    2,
+  );
+
+  const description = "预览规则配置（JSON 数组）：定义匹配条件、预览类型与 URL 模板";
+  await db
+    .prepare(
+      `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, sort_order, flags, updated_at)
+       VALUES (?, ?, ?, 'textarea', 2, 5, 0, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET
+         value = excluded.value,
+         description = excluded.description,
+         type = 'textarea',
+         group_id = 2,
+         sort_order = 5,
+         flags = 0,
+         updated_at = CURRENT_TIMESTAMP`,
+    )
+    .bind("preview_providers", previewProvidersValue, description)
+    .run();
+
+  const obsoleteKeys = [
+    "preview_office_types",
+    "preview_document_types",
+    "preview_document_apps",
+    "preview_iframe_templates",
+  ];
+  const placeholders = obsoleteKeys.map(() => "?").join(", ");
+  await db
+    .prepare(`DELETE FROM ${DbTables.SYSTEM_SETTINGS} WHERE key IN (${placeholders})`)
+    .bind(...obsoleteKeys)
+    .run();
 }
 
 export async function addFileNamingStrategySetting(db) {

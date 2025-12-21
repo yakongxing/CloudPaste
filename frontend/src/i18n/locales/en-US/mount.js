@@ -262,6 +262,14 @@ export default {
     audioPreview: {
       loadingAudio: "Loading...",
       audioPlayer: "Audio Player",
+      sendToGlobalPlayer: "Send to Global Player",
+      playingInGlobalPlayer: "Playing in Global Player",
+      backToPreview: "Back",
+      closePlayer: "Close Player",
+      expandPlayer: "Expand Player",
+      collapsePlayer: "Collapse Player",
+      unknownAudio: "Unknown Audio",
+      unknownArtist: "Unknown Artist",
     },
     videoPreview: {
       loadingVideo: "Loading...",

@@ -82,6 +82,14 @@ export default {
       notSupported: "此文件类型不支持预览",
       downloadToView: "请下载文件查看",
 
+      // 文本预览模式切换（统一归属“文本预览”）
+      modes: {
+        text: "文本",
+        code: "代码",
+        markdown: "Markdown",
+        html: "HTML",
+      },
+
       // 通用预览
       generic: {
         applicationFile: "应用程序文件",

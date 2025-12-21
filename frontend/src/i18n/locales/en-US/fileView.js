@@ -82,6 +82,14 @@ export default {
       notSupported: "This file type does not support preview",
       downloadToView: "Please download the file to view",
 
+      // Text preview mode switch (all belong to \"text preview\")
+      modes: {
+        text: "Text",
+        code: "Code",
+        markdown: "Markdown",
+        html: "HTML",
+      },
+
       // Generic preview
       generic: {
         applicationFile: "Application File",

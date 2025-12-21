@@ -12,6 +12,7 @@ import {
   addCustomContentSettings,
   addFileNamingStrategySetting,
   addPreviewSettings,
+  resetPreviewProvidersDefaults,
   addSiteSettings,
   createDefaultGuestApiKey,
 } from "./seed.js";
@@ -591,9 +592,9 @@ export async function runLegacyMigrationByVersion(db, version) {
       break;
 
     case 23:
-      console.log("版本23：检查并补充 preview_document_apps 预览模板配置...");
+      console.log("版本23：检查并补充 preview_providers 预览规则配置...");
       await addPreviewSettings(db);
-      console.log("版本23：preview_document_apps 配置检查/创建完成。");
+      console.log("版本23：preview_providers 配置检查/创建完成。");
       console.log("版本23：更新 webdav_upload_mode 显示选项为“流式上传/单次上传”...");
       await normalizeWebDavUploadModeLabels(db);
       console.log("版本23：webdav_upload_mode 选项更新完成。");
@@ -646,6 +647,12 @@ export async function runLegacyMigrationByVersion(db, version) {
         "enable_folder_summary_compute BOOLEAN DEFAULT 0",
       );
       console.log("版本30：storage_mounts.enable_folder_summary_compute 字段检查/创建完成。");
+      break;
+
+    case 31:
+      console.log("版本31：重置 preview_providers 默认规则...");
+      await resetPreviewProvidersDefaults(db);
+      console.log("版本31：preview_providers 默认规则重置完成。");
       break;
 
     default:

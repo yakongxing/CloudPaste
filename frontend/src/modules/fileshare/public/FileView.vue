@@ -221,7 +221,7 @@ const openEditModal = async () => {
         previewUrl: prev.previewUrl,
         downloadUrl: prev.downloadUrl,
         linkType: prev.linkType,
-        documentPreview: prev.documentPreview,
+        previewSelection: prev.previewSelection,
       };
     }
 

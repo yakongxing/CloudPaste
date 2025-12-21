@@ -41,7 +41,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { IconExclamation } from "@/components/icons";
 import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
@@ -75,7 +75,11 @@ const error = ref(false);
 const providerOptions = computed(() => {
   const options = [];
 
-  if (props.nativeUrl || props.previewUrl) {
+  const providers = props.providers || {};
+  const hasNativePlaceholder = Object.values(providers).some((v) => v === "native");
+
+  // 默认原生预览（当规则没有显式声明 native 占位时）
+  if (!hasNativePlaceholder && (props.nativeUrl || props.previewUrl)) {
     options.push({
       key: "native",
       label: t("fileView.preview.pdf.browserNative"),
@@ -83,13 +87,20 @@ const providerOptions = computed(() => {
     });
   }
 
-  const providers = props.providers || {};
-  for (const key of Object.keys(providers)) {
-    options.push({
-      key,
-      label: key,
-      url: providers[key],
-    });
+  // providers 中允许出现 url === "native" 的占位：表示走浏览器原生（与默认 native 同一条 URL）
+  for (const [key, url] of Object.entries(providers)) {
+    if (!url) continue;
+    if (url === "native") {
+      const native = props.nativeUrl || props.previewUrl;
+      if (!native) continue;
+      options.push({
+        key,
+        label: key === "native" ? t("fileView.preview.pdf.browserNative") : key,
+        url: native,
+      });
+      continue;
+    }
+    options.push({ key, label: key, url });
   }
 
   return options;
@@ -116,11 +127,18 @@ const handleError = () => {
   emit("error");
 };
 
-onMounted(() => {
-  const opts = providerOptions.value;
-  if (opts.length) {
-    // 默认优先使用浏览器原生预览
-    selectedProviderKey.value = "native";
-  }
-});
+watch(
+  providerOptions,
+  (options) => {
+    if (!options.length) {
+      selectedProviderKey.value = "";
+      return;
+    }
+    const exists = options.some((opt) => opt.key === selectedProviderKey.value);
+    if (exists) return;
+    // 优先 native（如果存在），否则选第一个
+    selectedProviderKey.value = options.some((opt) => opt.key === "native") ? "native" : options[0].key;
+  },
+  { immediate: true },
+);
 </script>

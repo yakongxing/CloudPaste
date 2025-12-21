@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import EnvSwitcher from "./components/EnvSwitcher.vue";
 import LanguageSwitcher from "./components/LanguageSwitcher.vue";
 import PWAInstallPrompt from "./components/PWAInstallPrompt.vue";
+import GlobalMusicPlayer from "./components/common/GlobalMusicPlayer.vue";
 import { useAuthStore } from "./stores/authStore.js";
 import { useSiteConfigStore } from "./stores/siteConfigStore.js";
 import FooterMarkdownRenderer from "./modules/admin/components/FooterMarkdownRenderer.vue";
@@ -331,6 +332,9 @@ const isDev = import.meta.env.DEV;
 
     <!-- PWA 安装提示组件 -->
     <PWAInstallPrompt :dark-mode="isDarkMode" />
+
+    <!-- 全局音乐播放器 -->
+    <GlobalMusicPlayer />
 
     <!-- 全局消息提示 -->
     <div
