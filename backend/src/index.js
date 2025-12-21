@@ -131,6 +131,8 @@ app.use("*", async (c, next) => {
         "Authorization",
         "X-API-KEY",
         "X-FS-Path-Token",
+        "X-FS-Path-Tokens",
+        "X-Custom-Auth-Key",
         "Depth",
         "Destination",
         "Overwrite",
