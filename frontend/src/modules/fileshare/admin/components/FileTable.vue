@@ -171,7 +171,7 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits, computed, h } from "vue";
+import { computed, h } from "vue";
 import AdminTable from "@/components/common/AdminTable.vue";
 import { getDisplayName } from "@/utils/fileTypes.js";
 import { IconCopy, IconDelete, IconEye, IconLink, IconLockClosed, IconQrCode, IconRename } from "@/components/icons";

@@ -52,6 +52,7 @@ const markdownContainer = ref(null);
 const isDestroyed = ref(false);
 const isActive = ref(true);
 let renderVersion = 0;
+let renderTimer = null;
 
 /**
  * 检查组件是否应该继续执行异步操作
@@ -182,16 +183,29 @@ const renderMarkdown = async () => {
   }
 };
 
+/**
+ * 延迟渲染（防抖）
+ */
+const scheduleRenderMarkdown = () => {
+  // 递增版本号，让已经排队/执行中的任务失效
+  renderVersion++;
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(() => {
+    renderTimer = null;
+    renderMarkdown();
+  }, 80);
+};
+
 // 监听内容变化
-watch(() => props.content, renderMarkdown);
+watch(() => props.content, scheduleRenderMarkdown);
 
 // 监听暗色模式变化，重新渲染
-watch(() => props.darkMode, renderMarkdown);
+watch(() => props.darkMode, scheduleRenderMarkdown);
 
 // 组件挂载时渲染
 onMounted(() => {
   if (props.content) {
-    renderMarkdown();
+    scheduleRenderMarkdown();
   }
 });
 
@@ -199,7 +213,7 @@ onMounted(() => {
 onActivated(() => {
   isActive.value = true;
   if (props.content && !rendered.value) {
-    renderMarkdown();
+    scheduleRenderMarkdown();
   }
 });
 
@@ -215,6 +229,8 @@ onBeforeUnmount(() => {
   isActive.value = false;
   // 递增版本号，取消正在进行的渲染操作
   renderVersion++;
+  clearTimeout(renderTimer);
+  renderTimer = null;
 
   // 清理 DOM
   if (markdownContainer.value) {

@@ -136,71 +136,42 @@
         </div>
       </div>
 
-      <!-- PDF 预览工具栏 -->
-      <div v-if="isPdf" class="pdf-preview-toolbar p-3 mb-4 rounded-lg bg-opacity-50" :class="darkMode ? 'bg-gray-700/50' : 'bg-gray-100'">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <!-- 左侧：文件信息 -->
-          <div class="toolbar-left flex flex-wrap items-center gap-3">
-            <span class="font-medium" :class="darkMode ? 'text-gray-200' : 'text-gray-700'">PDF</span>
-          </div>
+      <!-- PDF / Office / EPUB：统一的“渠道选择 + 全屏”工具栏 -->
+      <PreviewChannelToolbar
+        v-if="isPdf"
+        title="PDF"
+        :dark-mode="darkMode"
+        :provider-options="pdfProviderOptions"
+        v-model="selectedPdfProvider"
+        :is-fullscreen="isContentFullscreen"
+        :fullscreen-enter-title="$t('mount.filePreview.fullscreen')"
+        :fullscreen-exit-title="$t('mount.filePreview.exitFullscreen')"
+        @toggle-fullscreen="toggleFullscreen"
+      />
 
-          <!-- 右侧：预览渠道切换 -->
-          <div class="toolbar-right flex flex-wrap items-center gap-2">
-            <select
-              v-if="pdfProviderOptions.length > 1"
-              v-model="selectedPdfProvider"
-              class="px-3 py-1 text-sm border rounded"
-              :class="darkMode ? 'bg-gray-600 border-gray-500 text-gray-200' : 'bg-white border-gray-300 text-gray-700'"
-            >
-              <option v-for="opt in pdfProviderOptions" :key="opt.key" :value="opt.key">
-                {{ opt.label }}
-              </option>
-            </select>
-            <button
-              @click="toggleFullscreen"
-              class="fullscreen-btn flex items-center px-3 py-1 text-sm border rounded transition-colors"
-              :class="darkMode ? 'bg-gray-600 hover:bg-gray-700 border-gray-500 text-gray-200' : 'bg-white hover:bg-gray-50 border-gray-300 text-gray-700'"
-              :title="isContentFullscreen ? $t('mount.filePreview.exitFullscreen') : $t('mount.filePreview.fullscreen')"
-            >
-              <IconExpand v-if="!isContentFullscreen" size="sm" aria-hidden="true" />
-              <IconCollapse v-else size="sm" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      </div>
+      <PreviewChannelToolbar
+        v-if="isOffice"
+        :title="officeTypeDisplayName"
+        :dark-mode="darkMode"
+        :provider-options="officeProviderOptions"
+        v-model="selectedOfficeProvider"
+        :is-fullscreen="isContentFullscreen"
+        :fullscreen-enter-title="$t('mount.filePreview.fullscreen')"
+        :fullscreen-exit-title="$t('mount.filePreview.exitFullscreen')"
+        @toggle-fullscreen="toggleFullscreen"
+      />
 
-      <!-- Office 预览工具栏 -->
-      <div v-if="isOffice" class="office-preview-toolbar p-3 mb-4 rounded-lg bg-opacity-50" :class="darkMode ? 'bg-gray-700/50' : 'bg-gray-100'">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <!-- 左侧：文件信息 -->
-          <div class="toolbar-left flex flex-wrap items-center gap-3">
-            <span class="font-medium" :class="darkMode ? 'text-gray-200' : 'text-gray-700'">{{ officeTypeDisplayName }}</span>
-          </div>
-
-          <!-- 右侧：预览渠道切换 -->
-          <div class="toolbar-right flex flex-wrap items-center gap-2">
-            <select
-              v-if="officeProviderOptions.length > 1"
-              v-model="selectedOfficeProvider"
-              class="px-3 py-1 text-sm border rounded"
-              :class="darkMode ? 'bg-gray-600 border-gray-500 text-gray-200' : 'bg-white border-gray-300 text-gray-700'"
-            >
-              <option v-for="opt in officeProviderOptions" :key="opt.key" :value="opt.key">
-                {{ opt.label }}
-              </option>
-            </select>
-            <button
-              @click="toggleFullscreen"
-              class="fullscreen-btn flex items-center px-3 py-1 text-sm border rounded transition-colors"
-              :class="darkMode ? 'bg-gray-600 hover:bg-gray-700 border-gray-500 text-gray-200' : 'bg-white hover:bg-gray-50 border-gray-300 text-gray-700'"
-              :title="isContentFullscreen ? '退出全屏' : '全屏显示'"
-            >
-              <IconExpand v-if="!isContentFullscreen" size="sm" aria-hidden="true" />
-              <IconCollapse v-else size="sm" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      </div>
+      <PreviewChannelToolbar
+        v-if="isEpub"
+        title="EPUB"
+        :dark-mode="darkMode"
+        :provider-options="epubProviderOptions"
+        v-model="selectedEpubProvider"
+        :is-fullscreen="isContentFullscreen"
+        :fullscreen-enter-title="$t('mount.filePreview.fullscreen')"
+        :fullscreen-exit-title="$t('mount.filePreview.exitFullscreen')"
+        @toggle-fullscreen="toggleFullscreen"
+      />
 
       <!-- 预览内容 -->
       <div
@@ -362,6 +333,18 @@
           />
         </div>
 
+        <!-- EPUB预览 -->
+        <div v-else-if="isEpub" class="epub-preview h-[600px]">
+          <EpubFsPreview
+            :provider-key="selectedEpubProvider"
+            :providers="resolvedPreview.providers || {}"
+            :native-url="authenticatedPreviewUrl"
+            :dark-mode="darkMode"
+            @load="handleContentLoaded"
+            @error="handleContentError"
+          />
+        </div>
+
         <!-- Office文件预览 -->
         <div v-else-if="isOffice" ref="officePreviewRef" class="office-preview">
           <OfficeFsPreview
@@ -469,6 +452,8 @@ import { useI18n } from "vue-i18n";
 import { IconCollapse, IconDocument, IconDownload, IconError, IconExclamationSolid, IconExpand, IconEye, IconLink, IconRefresh, IconSave } from "@/components/icons";
 import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 import { usePreviewRenderers, useFilePreviewExtensions, useFileSave, resolvePreviewSelection, PREVIEW_KEYS } from "@/composables/index.js";
+import { useProviderSelector } from "@/composables/file-preview/useProviderSelector.js";
+import { useElementFullscreen } from "@/composables/useElementFullscreen.js";
 import { usePathPassword } from "@/composables/usePathPassword.js";
 import { useAuthStore } from "@/stores/authStore.js";
 import { useFsService } from "@/modules/fs/fsService.js";
@@ -478,8 +463,10 @@ import VideoPreview from "./VideoPreview.vue";
 import TextPreview from "./TextPreview.vue";
 import ArchivePreview from "./ArchivePreview.vue";
 import PdfFsPreview from "./PdfFsPreview.vue";
+import EpubFsPreview from "./EpubFsPreview.vue";
 import OfficeFsPreview from "./OfficeFsPreview.vue";
 import IframePreview from "@/components/common/IframePreview.vue";
+import PreviewChannelToolbar from "@/components/common/preview/PreviewChannelToolbar.vue";
 import { LivePhotoViewer } from "@/components/common/LivePhoto";
 import { detectLivePhoto, isLivePhotoImage } from "@/utils/livePhotoUtils.js";
 
@@ -592,6 +579,7 @@ const isImage = computed(() => previewKey.value === PREVIEW_KEYS.IMAGE);
 const isVideo = computed(() => previewKey.value === PREVIEW_KEYS.VIDEO);
 const isAudio = computed(() => previewKey.value === PREVIEW_KEYS.AUDIO);
 const isPdf = computed(() => previewKey.value === PREVIEW_KEYS.PDF);
+const isEpub = computed(() => previewKey.value === PREVIEW_KEYS.EPUB);
 const isOffice = computed(() => previewKey.value === PREVIEW_KEYS.OFFICE);
 const isIframe = computed(() => previewKey.value === PREVIEW_KEYS.IFRAME);
 const isArchive = computed(() => previewKey.value === PREVIEW_KEYS.ARCHIVE);
@@ -627,70 +615,19 @@ const textEncoding = ref("utf-8");
 const textPreviewRef = ref(null);
 const userHasManuallyChanged = ref(false);
 
-// PDF 预览状态管理
-const selectedPdfProvider = ref("native");
-
-// PDF provider 选项
-const pdfProviderOptions = computed(() => {
-  const options = [];
-
-  const providers = resolvedPreview.value.providers || {};
-  const hasNativePlaceholder = Object.values(providers).some((v) => v === "native");
-
-  // 默认原生预览选项（当规则没有显式声明 native 占位时）
-  if (!hasNativePlaceholder && authenticatedPreviewUrl.value) {
-    options.push({
-      key: "native",
-      label: t("mount.filePreview.browserNative"),
-      url: authenticatedPreviewUrl.value,
-    });
-  }
-
-  // providers 中允许 url === "native" 的占位：表示走浏览器原生（与默认 native 同一条 URL）
-  for (const [key, url] of Object.entries(providers)) {
-    if (!url) continue;
-    if (url === "native") {
-      if (!authenticatedPreviewUrl.value) continue;
-      options.push({
-        key,
-        label: key === "native" ? t("mount.filePreview.browserNative") : key,
-        url: authenticatedPreviewUrl.value,
-      });
-      continue;
-    }
-    options.push({
-      key,
-      label: key === "pdfjs" ? t("mount.filePreview.pdfjsLabel") : key,
-      url,
-    });
-  }
-
-  return options;
+// PDF 预览：统一用通用 providers 选择器
+const {
+  providerOptions: pdfProviderOptions,
+  selectedKey: selectedPdfProvider,
+  currentUrl: currentPdfPreviewUrl,
+} = useProviderSelector({
+  providers: computed(() => resolvedPreview.value.providers || {}),
+  nativeUrl: authenticatedPreviewUrl,
+  nativeLabel: computed(() => t("mount.filePreview.browserNative")),
+  labelMap: computed(() => ({
+    pdfjs: t("mount.filePreview.pdfjsLabel"),
+  })),
 });
-
-// 当前 PDF 预览 URL
-const currentPdfPreviewUrl = computed(() => {
-  const options = pdfProviderOptions.value;
-  if (!options.length) return "";
-  const current = options.find((opt) => opt.key === selectedPdfProvider.value) || options[0];
-  return current.url || "";
-});
-
-watch(
-  pdfProviderOptions,
-  (options) => {
-    if (!options.length) {
-      selectedPdfProvider.value = "";
-      return;
-    }
-    // 当当前选中值不在 options 中时：优先 native（如果存在），否则选第一个
-    const exists = options.some((opt) => opt.key === selectedPdfProvider.value);
-    if (!exists) {
-      selectedPdfProvider.value = options.some((opt) => opt.key === "native") ? "native" : options[0].key;
-    }
-  },
-  { immediate: true },
-);
 
 // Office 预览状态管理
 const selectedOfficeProvider = ref("");
@@ -775,6 +712,13 @@ const currentOfficePreviewUrl = computed(() => {
   return current.url || "";
 });
 
+// EPUB/电子书预览
+const { providerOptions: epubProviderOptions, selectedKey: selectedEpubProvider } = useProviderSelector({
+  providers: computed(() => resolvedPreview.value.providers || {}),
+  nativeUrl: authenticatedPreviewUrl,
+  nativeLabel: computed(() => t("mount.filePreview.browserNative")),
+});
+
 // 使用文件保存composable
 const { isSaving, saveFile } = useFileSave();
 
@@ -813,8 +757,8 @@ const availableEncodings = computed(() => {
 });
 
 // 内容区域全屏状态管理
-const isContentFullscreen = ref(false);
 const previewContentRef = ref(null);
+const { isFullscreen: isContentFullscreen, toggleFullscreen, exitFullscreen } = useElementFullscreen(previewContentRef);
 
 const previewContainerStyle = computed(() => {
   if (isContentFullscreen.value) {
@@ -836,17 +780,6 @@ const dynamicMaxHeight = computed(() => {
     return 600;
   }
 });
-
-// 简洁的全屏切换实现
-const toggleFullscreen = () => {
-  if (!document.fullscreenElement) {
-    // 进入全屏
-    previewContentRef.value?.requestFullscreen();
-  } else {
-    // 退出全屏
-    document.exitFullscreen();
-  }
-};
 
 // 保存文件功能
 const handleSaveFile = async () => {
@@ -979,18 +912,10 @@ watch(
 // 组件生命周期
 onMounted(() => {
   console.log("FilePreview组件已挂载");
-
-  // 监听全屏变化
-  document.addEventListener("fullscreenchange", () => {
-    isContentFullscreen.value = !!document.fullscreenElement;
-  });
 });
 
 onBeforeUnmount(() => {
-  // 退出全屏状态（如果处于全屏中）
-  if (document.fullscreenElement) {
-    document.exitFullscreen().catch(console.error);
-  }
+  void exitFullscreen();
 });
 </script>
 
@@ -1036,6 +961,27 @@ onBeforeUnmount(() => {
 :deep(:fullscreen .office-fs-preview-wrapper) {
   height: 100%;
   max-height: none;
+}
+
+/* 全屏模式下 EPUB 预览填满容器 */
+:deep(:fullscreen .epub-preview) {
+  height: 100% !important;
+  max-height: none !important;
+}
+
+:deep(:fullscreen .epub-fs-preview) {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+:deep(:fullscreen .foliate-epub-view) {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+:deep(:fullscreen foliate-view) {
+  height: 100% !important;
+  width: 100% !important;
 }
 
 /* 确保全屏模式下的控制栏固定在顶部 */

@@ -118,12 +118,29 @@ import IconBanSvg from '~icons/heroicons-outline/ban'
 import IconBellSvg from '~icons/heroicons-outline/bell'
 import IconQueueListSvg from '~icons/heroicons-outline/queue-list'
 
+// 书签和导航图标
+import IconBookmarkSvg from '~icons/heroicons-outline/bookmark'
+import IconBookmarkSolidSvg from '~icons/heroicons-solid/bookmark'
+import IconArrowLeftSvg from '~icons/heroicons-outline/arrow-left'
+import IconArrowRightSvg from '~icons/heroicons-outline/arrow-right'
+
 // 存储类型图标
 import IconMicrosoftOneDriveSvg from '~icons/mdi/microsoft-onedrive'
 import IconGoogleDriveSvg from '~icons/mdi/google-drive'
 import IconStorageGitHubSvg from '~icons/mdi/github'
 import IconCloudSyncOutlineSvg from '~icons/mdi/cloud-sync-outline'
 import IconMdiFolderSvg from '~icons/mdi/folder'
+
+// 压缩文件类型图标
+import IconFolderZipSvg from '~icons/mdi/folder-zip'
+import IconFolderZipOutlineSvg from '~icons/mdi/folder-zip-outline'
+import IconZipBoxSvg from '~icons/mdi/zip-box'
+import IconZipBoxOutlineSvg from '~icons/mdi/zip-box-outline'
+import IconPackageVariantSvg from '~icons/mdi/package-variant'
+import IconPackageVariantClosedSvg from '~icons/mdi/package-variant-closed'
+import IconArchiveOutlineSvg from '~icons/mdi/archive-outline'
+import IconDiscSvg from '~icons/mdi/disc'
+import IconFileTreeSvg from '~icons/mdi/file-tree'
 
 const normalizeClassName = (value) => {
   if (!value) return ''
@@ -400,13 +417,30 @@ export const IconBell = createIcon(IconBellSvg)
 export const IconQueueList = createIcon(IconQueueListSvg)
 export const IconX = createIcon(IconCloseSvg)
 
-// 存储类型图标（全部使用 MDI）
+// 书签和导航图标
+export const IconBookmark = createIcon(IconBookmarkSvg)
+export const IconBookmarkSolid = createIcon(IconBookmarkSolidSvg)
+export const IconArrowLeft = createIcon(IconArrowLeftSvg)
+export const IconArrowRight = createIcon(IconArrowRightSvg)
+
+// 存储类型图标（MDI）
 export const IconStorageS3 = createIcon(IconMdiDatabaseOutlineSvg)
 export const IconStorageOneDrive = createIcon(IconMicrosoftOneDriveSvg)
 export const IconStorageGoogleDrive = createIcon(IconGoogleDriveSvg)
 export const IconStorageGitHub = createIcon(IconStorageGitHubSvg)
 export const IconStorageWebDAV = createIcon(IconCloudSyncOutlineSvg)
 export const IconStorageLocal = createIcon(IconMdiFolderSvg)
+
+// 压缩文件类型图标（MDI）
+export const IconFolderZip = createIcon(IconFolderZipSvg)
+export const IconFolderZipOutline = createIcon(IconFolderZipOutlineSvg)
+export const IconZipBox = createIcon(IconZipBoxSvg)
+export const IconZipBoxOutline = createIcon(IconZipBoxOutlineSvg)
+export const IconPackageVariant = createIcon(IconPackageVariantSvg)
+export const IconPackageVariantClosed = createIcon(IconPackageVariantClosedSvg)
+export const IconArchiveOutline = createIcon(IconArchiveOutlineSvg)
+export const IconDisc = createIcon(IconDiscSvg)
+export const IconFileTree = createIcon(IconFileTreeSvg)
 
 // 导出所有图标
 export default {
@@ -523,10 +557,23 @@ export default {
   IconBell,
   IconQueueList,
   IconX,
+  IconBookmark,
+  IconBookmarkSolid,
+  IconArrowLeft,
+  IconArrowRight,
   IconStorageS3,
   IconStorageOneDrive,
   IconStorageGoogleDrive,
   IconStorageGitHub,
   IconStorageWebDAV,
-  IconStorageLocal
+  IconStorageLocal,
+  IconFolderZip,
+  IconFolderZipOutline,
+  IconZipBox,
+  IconZipBoxOutline,
+  IconPackageVariant,
+  IconPackageVariantClosed,
+  IconArchiveOutline,
+  IconDisc,
+  IconFileTree
 }

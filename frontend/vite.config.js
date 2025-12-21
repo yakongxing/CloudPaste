@@ -14,6 +14,7 @@ export default defineConfig(({ command, mode }) => {
   // 统一版本管理
   const APP_VERSION = "1.6.0";
   const isDev = command === "serve";
+  const enablePwa = command === "build";
 
   // 打印环境变量，帮助调试
   console.log("Vite环境变量:", {
@@ -22,6 +23,23 @@ export default defineConfig(({ command, mode }) => {
     APP_VERSION: APP_VERSION,
     MODE: mode,
     COMMAND: command,
+  });
+
+  const foliatePdfStubPath = fileURLToPath(new URL("./src/vendor/foliate-js/pdf.js", import.meta.url));
+
+  // foliate-js 的 view.js 会动态 import('./pdf.js')，但其 pdf.js 使用了 Vite 不兼容的 glob。
+  // CloudPaste 自身已有 PDF 预览，不需要 foliate-js 的 PDF 支持，因此把它替换为 stub，避免构建失败。
+  const foliatePdfStubPlugin = () => ({
+    name: "cloudpaste-foliate-pdf-stub",
+    enforce: "pre",
+    resolveId(source, importer) {
+      if (source !== "./pdf.js") return null;
+      if (!importer) return null;
+      if (importer.replaceAll("\\\\", "/").includes("/node_modules/foliate-js/view.js")) {
+        return foliatePdfStubPath;
+      }
+      return null;
+    },
   });
 
   return {
@@ -33,6 +51,7 @@ export default defineConfig(({ command, mode }) => {
     },
     plugins: [
       vue(),
+      foliatePdfStubPlugin(),
       Components({
         dts: false,
         resolvers: [
@@ -45,12 +64,13 @@ export default defineConfig(({ command, mode }) => {
       Icons({
         compiler: "vue3",
       }),
-      VitePWA({
-        registerType: "autoUpdate",
-        injectRegister: "auto", //自动注入更新检测代码
-        devOptions: {
-          enabled: true, // 开发环境启用PWA
-        },
+      enablePwa &&
+        VitePWA({
+          registerType: "autoUpdate",
+          injectRegister: "auto", //自动注入更新检测代码
+          devOptions: {
+            enabled: false, //开发环境PWA启用
+          },
         workbox: {
           globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2,ttf}"],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
@@ -386,8 +406,8 @@ export default defineConfig(({ command, mode }) => {
             },
           ],
         },
-      }),
-    ],
+        }),
+    ].filter(Boolean),
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -418,11 +438,22 @@ export default defineConfig(({ command, mode }) => {
         },
       },
     },
+    // foliate-js 的部分模块（例如 pdf.js）使用了 top-level await。
+    // 为了让 Vite/esbuild 在 dev 与 build 阶段都能正常处理，我们将 target 提升到 ES2022。
+    esbuild: {
+      target: "es2022",
+    },
     optimizeDeps: {
       include: ["vue-i18n", "chart.js", "qrcode", "mime-db", "docx-preview"],
+      // 跳过预构建，让 Vite 按原始 ESM 处理
+      exclude: ["foliate-js"],
+      esbuildOptions: {
+        target: "es2022",
+      },
     },
     build: {
       outDir: 'dist', // 显式指定输出目录
+      target: "es2022",
       minify: "terser",
       terserOptions: {
         compress: {

@@ -165,7 +165,7 @@ export class PreviewSettingsCache {
     if (["text", "code", "markdown", "html"].includes(previewKey)) return "text";
     if (["image", "video", "audio"].includes(previewKey)) return previewKey;
     if (previewKey === "office") return "office";
-    if (["pdf", "document"].includes(previewKey)) return "document";
+    if (["pdf", "document", "epub"].includes(previewKey)) return "document";
     return "";
   }
 

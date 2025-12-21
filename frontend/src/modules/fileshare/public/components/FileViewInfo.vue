@@ -5,7 +5,7 @@
       <div class="flex items-center gap-3">
         <!-- 文件图标 -->
         <div class="file-icon flex items-center justify-center w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-700">
-          <IconDocumentText :class="[iconClass, 'h-6 w-6']" />
+          <component :is="headerIconComponent" :class="[iconClass, 'h-6 w-6']" />
         </div>
 
         <!-- 文件名和类型 -->
@@ -214,13 +214,13 @@
 </template>
 
 <script setup>
-import { computed, ref, defineProps, onMounted, watch, onUnmounted } from "vue";
+import { computed, ref, onMounted, watch, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { getFilePassword as resolveFilePassword } from "@/utils/filePasswordUtils.js";
 import { useFileshareService } from "@/modules/fileshare/fileshareService.js";
 import { isImageLikeForExif, loadExifTagsFromArrayBufferAsync, buildExifRows, resolveGpsCoordinates } from "@/utils/exifReaderUtils.js";
-import { IconCalendar, IconCamera, IconCheck, IconChevronDown, IconClock, IconCopy, IconDocumentText, IconExternalLink, IconEye, IconLink, IconLocationMarker, IconShieldCheck } from "@/components/icons";
+import { IconBookOpen, IconCalendar, IconCamera, IconCheck, IconChevronDown, IconClock, IconCopy, IconDocumentText, IconExternalLink, IconEye, IconLink, IconLocationMarker, IconShieldCheck } from "@/components/icons";
 
 const { t } = useI18n();
 const fileshareService = useFileshareService();
@@ -235,6 +235,7 @@ import ImagePreview from "./previews/ImagePreview.vue";
 import VideoPreview from "./previews/VideoPreview.vue";
 import AudioPreview from "./previews/AudioPreview.vue";
 import PdfPreview from "./previews/PdfPreview.vue";
+import EpubPreview from "./previews/EpubPreview.vue";
 import TextPreview from "./previews/TextPreview.vue";
 import OfficeSharePreview from "./previews/OfficeSharePreview.vue";
 import GenericPreview from "./previews/GenericPreview.vue";
@@ -313,6 +314,7 @@ const isImage = computed(() => previewKey.value === PREVIEW_KEYS.IMAGE);
 const isVideo = computed(() => previewKey.value === PREVIEW_KEYS.VIDEO);
 const isAudio = computed(() => previewKey.value === PREVIEW_KEYS.AUDIO);
 const isPdf = computed(() => previewKey.value === PREVIEW_KEYS.PDF);
+const isEpub = computed(() => previewKey.value === PREVIEW_KEYS.EPUB);
 const isText = computed(() => previewKey.value === PREVIEW_KEYS.TEXT);
 
 // 文件图标类名 - 使用标准的 getIconType 函数
@@ -325,10 +327,18 @@ const iconClass = computed(() => {
     audio: "text-blue-500",
     text: "text-yellow-500",
     document: "text-red-500",
+    book: "text-amber-500",
     folder: "text-blue-500",
     file: "text-gray-500",
   };
   return colorMap[iconType] || "text-gray-500";
+});
+
+// 分享页头部图标：电子书用“书本”，其余先保持原来的“文档”图标（避免一次性改太多 UI）
+const headerIconComponent = computed(() => {
+  const iconType = getIconType(props.fileInfo);
+  if (iconType === "book") return IconBookOpen;
+  return IconDocumentText;
 });
 
 const currentPreviewComponent = computed(() => {
@@ -337,6 +347,7 @@ const currentPreviewComponent = computed(() => {
     [PREVIEW_KEYS.VIDEO]: VideoPreview,
     [PREVIEW_KEYS.AUDIO]: AudioPreview,
     [PREVIEW_KEYS.PDF]: PdfPreview,
+    [PREVIEW_KEYS.EPUB]: EpubPreview,
     [PREVIEW_KEYS.TEXT]: TextPreview,
     [PREVIEW_KEYS.OFFICE]: OfficeSharePreview,
     [PREVIEW_KEYS.IFRAME]: IframePreview,
@@ -404,6 +415,16 @@ const previewComponentProps = computed(() => {
     providers,
     nativeUrl: previewUrl,
   };
+  }
+
+  // EPUB：支持 native（foliate-js 本地渲染）+ 外部 iframe 预览器
+  if (isEpub.value) {
+    return {
+      providers: resolvedPreview.value.providers || {},
+      previewUrl,
+      nativeUrl: previewUrl,
+      darkMode: props.darkMode,
+    };
   }
 
   if (isOfficeFile.value) {

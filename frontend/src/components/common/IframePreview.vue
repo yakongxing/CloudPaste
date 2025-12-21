@@ -37,9 +37,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
+import { useProviderSelector } from "@/composables/file-preview/useProviderSelector.js";
 
 const { t } = useI18n();
 
@@ -66,24 +67,11 @@ const emit = defineEmits(["load", "error"]);
 
 const loading = ref(true);
 const error = ref(false);
-const selectedProviderKey = ref("");
 
-const providerOptions = computed(() => {
-  const options = [];
-  for (const [key, url] of Object.entries(props.providers || {})) {
-    if (!url) continue;
-    // iframe 预览必须是 URL；native 是占位符（不应出现在 iframe providers 里）
-    if (url === "native") continue;
-    options.push({ key, label: key, url });
-  }
-  return options;
-});
-
-const currentPreviewUrl = computed(() => {
-  const options = providerOptions.value;
-  if (!options.length) return "";
-  const current = options.find((opt) => opt.key === selectedProviderKey.value) || options[0];
-  return current.url || "";
+const { providerOptions, selectedKey: selectedProviderKey, currentUrl: currentPreviewUrl } = useProviderSelector({
+  providers: computed(() => props.providers || {}),
+  nativeUrl: "",
+  filter: ({ url }) => url !== "native",
 });
 
 const handleLoad = () => {
@@ -98,12 +86,13 @@ const handleError = () => {
   emit("error");
 };
 
-onMounted(() => {
-  const options = providerOptions.value;
-  if (options.length) {
-    selectedProviderKey.value = options[0].key;
-  }
-  loading.value = true;
-  error.value = false;
-});
+watch(
+  currentPreviewUrl,
+  (url) => {
+    if (!url) return;
+    loading.value = true;
+    error.value = false;
+  },
+  { immediate: true },
+);
 </script>

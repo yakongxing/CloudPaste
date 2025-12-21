@@ -183,6 +183,24 @@ export async function addPreviewSettings(db) {
               native: "native",
             },
           },
+          {
+            id: "epub",
+            priority: 0,
+            match: { ext: ["epub", "mobi", "azw3", "azw", "fb2", "cbz"] },
+            previewKey: "epub",
+            providers: {
+              native: "native",
+            },
+          },
+          {
+            id: "archive",
+            priority: 0,
+            match: {
+              ext: ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "tgz", "tbz", "tbz2", "txz", "cpio", "iso", "cab", "xar", "ar", "a", "mtree"],
+            },
+            previewKey: "archive",
+            providers: {},
+          },
         ],
         null,
         2,
@@ -251,6 +269,26 @@ export async function resetPreviewProvidersDefaults(db) {
         providers: {
           native: "native",
         },
+      },
+      {
+        id: "epub",
+        priority: 0,
+        match: { ext: ["epub", "mobi", "azw3", "azw", "fb2", "cbz"] },
+        previewKey: "epub",
+        providers: {
+          native: "native",
+        },
+      },
+      {
+        id: "archive",
+        priority: 0,
+        match: {
+          // 压缩包/归档文件：走本地“在线解压预览”组件
+          // 注：后端只取最后一个扩展名（例如 foo.tar.gz -> gz），因此把 tgz/tbz/txz 也单独列出来
+          ext: ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "tgz", "tbz", "tbz2", "txz", "cpio", "iso", "cab", "xar", "ar", "a", "mtree"],
+        },
+        previewKey: "archive",
+        providers: {},
       },
     ],
     null,

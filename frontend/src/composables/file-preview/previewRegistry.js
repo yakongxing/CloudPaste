@@ -5,6 +5,7 @@ export const PREVIEW_KEYS = Object.freeze({
   VIDEO: "video",
   AUDIO: "audio",
   PDF: "pdf",
+  EPUB: "epub",
   OFFICE: "office",
   TEXT: "text",
   CODE: "code",

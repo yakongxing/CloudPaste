@@ -16,7 +16,7 @@ const PREVIEW_KINDS = Object.freeze({
 const TEXT_KEYS = new Set(["text", "code", "markdown", "html"]);
 const OFFICE_NATIVE_EXTS = new Set(["docx", "xlsx", "pptx"]);
 // providers 里的 "native" 是一个“占位符”，表示走本地/原生预览实现。
-const NATIVE_PROVIDER_SUPPORTED_KEYS = new Set(["office", "pdf"]);
+const NATIVE_PROVIDER_SUPPORTED_KEYS = new Set(["office", "pdf", "epub"]);
 
 function normalizePreviewKey(key) {
   const v = (key || "").toString().toLowerCase();

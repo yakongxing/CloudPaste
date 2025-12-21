@@ -496,6 +496,7 @@ const previewKeyOptions = computed(() => {
     "video",
     "audio",
     "pdf",
+    "epub",
     "office",
     "text",
     "archive",
@@ -587,6 +588,24 @@ const defaultSettings = {
         providers: {
           native: "native",
         },
+      },
+      {
+        id: "epub",
+        priority: 0,
+        match: { ext: ["epub", "mobi", "azw3", "azw", "fb2", "cbz"] },
+        previewKey: "epub",
+        providers: {
+          native: "native",
+        },
+      },
+      {
+        id: "archive",
+        priority: 0,
+        match: {
+          ext: ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "tgz", "tbz", "tbz2", "txz", "cpio", "iso", "cab", "xar", "ar", "a", "mtree"],
+        },
+        previewKey: "archive",
+        providers: {},
       },
     ],
     null,
@@ -767,8 +786,8 @@ const handleSaveSettings = async (event) => {
         const providers = rule?.providers || [];
         const hasNativePlaceholder = providers.some((p) => String(p?.urlTemplate || "").trim() === "native");
 
-        // native 只能用于 pdf/office（其它类型写了也会被后端清掉，用户会困惑）
-        if (hasNativePlaceholder && !["pdf", "office", "iframe"].includes(previewKey)) {
+        // native 只能用于“前端能解释 native 占位符”的预览类型（否则会被后端清掉，用户会困惑）
+        if (hasNativePlaceholder && !["pdf", "office", "epub", "iframe"].includes(previewKey)) {
           showError(t("admin.preview.previewRuleNativeNotSupported"));
           return;
         }

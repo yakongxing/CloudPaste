@@ -170,9 +170,6 @@ export const DEFAULT_SETTINGS = {
     flag: SETTING_FLAGS.PUBLIC,
     default_value: JSON.stringify(
       [
-        // 无后缀文件（README/LICENSE/Dockerfile/Makefile 等）兜底：
-        // - 这些文件名通常没有扩展名，单靠 ext 无法命中
-        // - 用 regex 让它们走统一的“文本预览”（文本区可切换：文本/代码/Markdown/HTML）
         {
           id: "noext-text",
           priority: 0,
@@ -209,6 +206,24 @@ export const DEFAULT_SETTINGS = {
           providers: {
             native: "native",
           },
+        },
+        {
+          id: "epub",
+          priority: 0,
+          match: { ext: ["epub", "mobi", "azw3", "azw", "fb2", "cbz"] },
+          previewKey: "epub",
+          providers: {
+            native: "native",
+          },
+        },
+        {
+          id: "archive",
+          priority: 0,
+          match: {
+            ext: ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "tgz", "tbz", "tbz2", "txz", "cpio", "iso", "cab", "xar", "ar", "a", "mtree"],
+          },
+          previewKey: "archive",
+          providers: {},
         },
       ],
       null,

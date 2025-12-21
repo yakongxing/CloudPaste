@@ -17,6 +17,13 @@ import { contextMenuDirective } from "./components/common/contextMenu.js";
 // 导入PWA相关模块
 import { pwaManager, pwaUtils } from "./pwa/pwaManager.js";
 
+// 开发环境：清理旧的 Service Worker
+if (import.meta.env.DEV && "serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations?.().then((registrations) => {
+    registrations.forEach((reg) => reg.unregister());
+  });
+}
+
 // 创建应用实例
 const app = createApp(App);
 

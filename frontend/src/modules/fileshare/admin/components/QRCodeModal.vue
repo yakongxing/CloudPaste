@@ -39,7 +39,7 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits, computed } from "vue";
+import { computed } from "vue";
 import { IconClose, IconDownload } from "@/components/icons";
 
 const props = defineProps({

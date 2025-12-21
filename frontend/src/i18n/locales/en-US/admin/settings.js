@@ -162,8 +162,6 @@ export default {
     rulePreviewKeyPlaceholder: "Select",
     ruleMatchExtLabel: "Match extensions",
     ruleMatchExtPlaceholder: "pdf,docx,xlsx",
-    ruleMatchTypeLabel: "Match types",
-    ruleMatchTypePlaceholder: "image,video,office",
     ruleMatchRegexLabel: "Match regex",
     ruleMatchRegexPlaceholder: ".*\\.pdf$",
     ruleMatchHelp:
@@ -188,6 +186,7 @@ export default {
       video: "Video",
       audio: "Audio",
       pdf: "PDF",
+      epub: "EPUB",
       office: "Office",
       text: "Text",
       code: "Code",
