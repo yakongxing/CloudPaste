@@ -16,31 +16,12 @@ import {
   getScheduledJobsHourlyAnalytics,
 } from "../services/scheduledJobRunService.js";
 import { scheduledTaskRegistry } from "../scheduled/ScheduledTaskRegistry.js";
-import { CronExpressionParser } from "cron-parser";
 import { isCloudflareWorkerEnvironment } from "../utils/environmentUtils.js";
-import { getSchedulerTickState } from "../services/schedulerTickerStateService.js";
+import { computeSchedulerTickerNextTick, getSchedulerTickState } from "../services/schedulerTickerStateService.js";
 
 // 调度任务相关路由（仅 Docker/Node 环境使用 + 管理员配置）
 const scheduledRoutes = new Hono();
 const requireAdmin = usePolicy("admin.all");
-
-/**
- * 从 cron 规则计算“下一次触发时间”（UTC ISO）
- * @param {string} cron
- * @param {string} nowIso
- * @returns {{ nextFireAt: string | null, error: string | null }}
- */
-function computeNextFireAtFromCron(cron, nowIso) {
-  if (!cron || typeof cron !== "string") {
-    return { nextFireAt: null, error: "cron 为空" };
-  }
-  try {
-    const expr = CronExpressionParser.parse(cron, { currentDate: nowIso });
-    return { nextFireAt: expr.next().toDate().toISOString(), error: null };
-  } catch (e) {
-    return { nextFireAt: null, error: e?.message || String(e) };
-  }
-}
 
 // ==================== Handler 类型 API ====================
 
@@ -240,23 +221,16 @@ scheduledRoutes.get("/api/admin/scheduled/ticker", requireAdmin, async (c) => {
         ? "default"
         : "missing";
 
-  // 计算“下一次触发时间”
-  let nextFireAt = null;
-  let cronParseError = null;
   const tickState = await getSchedulerTickState(c.env.DB);
   const observedCron = tickState.lastCron || null;
   // 1) lastCron（来自“真实触发”的 cron）
   // 2) Docker 环境回退到 configuredCron（因为 Docker 的触发器就是靠它配置的）
   // 3) Workers 环境没有 lastCron 前，无法计算 next（只能等待首次真实触发）
   const activeCron = observedCron || (runtime === "docker" ? configuredCron : null);
-  if (activeCron) {
-    const res = computeNextFireAtFromCron(activeCron, nowIso);
-    nextFireAt = res.nextFireAt;
-    cronParseError = res.error;
-  }
 
   const lastTickMs = tickState.lastMs;
   const lastTickAt = lastTickMs ? new Date(lastTickMs).toISOString() : null;
+  const nextTick = computeSchedulerTickerNextTick({ activeCron, nowIso, lastTickMs });
 
   return jsonOk(
     c,
@@ -276,13 +250,16 @@ scheduledRoutes.get("/api/admin/scheduled/ticker", requireAdmin, async (c) => {
         source: lastTickMs ? "system_settings" : null,
       },
       nextTick: {
-        at: nextFireAt,
-        cronParseError,
+        at: nextTick.at,
+        scheduledAt: nextTick.scheduledAt,
+        estimatedAt: nextTick.estimatedAt,
+        intervalSec: nextTick.intervalSec,
+        cronParseError: nextTick.cronParseError,
       },
       note:
         runtime === "cloudflare" && !observedCron
           ? "尚未观察到平台触发器的首次真实触发：暂时无法计算预计下次触发时间；首次触发后会自动显示。"
-          : "提示：这里显示的是“预计时间”（按 cron 规则计算），实际触发可能存在延迟；到点后可点右下角刷新校准。",
+          : "提示：at 优先按“上次真实触发 + 间隔”估算（可能包含延迟）；scheduledAt 是 cron 的计划时间（通常是整分/整 5 分钟）。到点后可点右下角刷新校准。",
     },
     "获取平台触发器状态成功",
   );

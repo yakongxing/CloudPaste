@@ -1,5 +1,6 @@
 import { DbTables } from "../constants/index.js";
 import { SETTING_FLAGS, SETTING_GROUPS, SETTING_TYPES } from "../constants/settings.js";
+import { CronExpressionParser } from "cron-parser";
 
 // 用于存储“外部触发器（CF/Docker tick）真实触发状态”的固定 key
 // - 只维护 1 行（system_settings.key 为主键）
@@ -96,4 +97,90 @@ export async function upsertSchedulerTickState(db, state) {
       error: e?.message || String(e),
     });
   }
+}
+
+/**
+ * 从 cron 估算“触发间隔秒数”
+ *
+ *
+ * 用 cron-parser 连续取两次 next，做差值。
+ *
+ * @param {string|null} cron
+ * @param {string} nowIso
+ * @returns {{ intervalSec: number|null, error: string|null }}
+ */
+export function computeCronIntervalSec(cron, nowIso) {
+  const raw = typeof cron === "string" ? cron.trim() : "";
+  if (!raw) return { intervalSec: null, error: "cron 为空" };
+  try {
+    const expr = CronExpressionParser.parse(raw, { currentDate: nowIso });
+    const next1 = expr.next().toDate();
+    const next2 = expr.next().toDate();
+    const diffMs = next2.getTime() - next1.getTime();
+    const intervalSec = diffMs > 0 ? Math.floor(diffMs / 1000) : null;
+    return { intervalSec, error: null };
+  } catch (e) {
+    return { intervalSec: null, error: e?.message || String(e) };
+  }
+}
+
+/**
+ * 从 cron 计算下一次“计划触发时间”（UTC ISO）
+ * @param {string|null} cron
+ * @param {string} nowIso
+ * @returns {{ scheduledAt: string|null, error: string|null }}
+ */
+export function computeNextScheduledAtFromCron(cron, nowIso) {
+  const raw = typeof cron === "string" ? cron.trim() : "";
+  if (!raw) return { scheduledAt: null, error: "cron 为空" };
+  try {
+    const expr = CronExpressionParser.parse(raw, { currentDate: nowIso });
+    const scheduledAt = expr.next().toDate().toISOString();
+    return { scheduledAt, error: null };
+  } catch (e) {
+    return { scheduledAt: null, error: e?.message || String(e) };
+  }
+}
+
+/**
+ * 计算“平台触发器 ticker”的 nextTick（给 /api/admin/scheduled/ticker 用）
+ *
+ * - at：给前端倒计时用的预计时间（优先 estimatedAt）
+ * - scheduledAt：按 cron 规则算出来的“计划时间”（经常是整分/整 5 分钟）
+ * - estimatedAt：按 lastTickMs + intervalSec 推算出来的“体感时间”
+ * - intervalSec：从 cron 估算出来的间隔
+ *
+ * @param {{ activeCron: string|null, nowIso: string, lastTickMs: number|null }} params
+ */
+export function computeSchedulerTickerNextTick({ activeCron, nowIso, lastTickMs }) {
+  const cron = typeof activeCron === "string" && activeCron.trim() ? activeCron.trim() : null;
+
+  const scheduledRes = computeNextScheduledAtFromCron(cron, nowIso);
+  const intervalRes = computeCronIntervalSec(cron, nowIso);
+
+  const intervalSec = intervalRes.intervalSec;
+  const hasLastTick =
+    typeof lastTickMs === "number" && Number.isFinite(lastTickMs) && lastTickMs > 0;
+
+  const canEstimate =
+    hasLastTick &&
+    typeof intervalSec === "number" &&
+    Number.isFinite(intervalSec) &&
+    intervalSec > 0;
+
+  const estimatedAt = canEstimate
+    ? new Date(lastTickMs + intervalSec * 1000).toISOString()
+    : null;
+
+  const at = estimatedAt || scheduledRes.scheduledAt || null;
+
+  const cronParseError = scheduledRes.error || intervalRes.error || null;
+
+  return {
+    at,
+    scheduledAt: scheduledRes.scheduledAt,
+    estimatedAt,
+    intervalSec,
+    cronParseError,
+  };
 }
