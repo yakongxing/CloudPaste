@@ -78,25 +78,23 @@ export async function initDefaultSettings(db) {
   ];
 
   for (const setting of defaultSettings) {
-    const existing = await db.prepare(`SELECT value FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind(setting.key).first();
-    if (!existing) {
-      await db
-        .prepare(
-          `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, options, sort_order, flags)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          setting.key,
-          setting.value,
-          setting.description,
-          setting.type,
-          setting.group_id,
-          setting.options || null,
-          setting.sort_order,
-          setting.flags,
-        )
-        .run();
-    }
+    // INSERT OR IGNORE：已存在就忽略
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, options, sort_order, flags)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        setting.key,
+        setting.value,
+        setting.description,
+        setting.type,
+        setting.group_id,
+        setting.options || null,
+        setting.sort_order,
+        setting.flags,
+      )
+      .run();
   }
 }
 
@@ -214,16 +212,13 @@ export async function addPreviewSettings(db) {
   ];
 
   for (const setting of previewSettings) {
-    const existing = await db.prepare(`SELECT key FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind(setting.key).first();
-    if (!existing) {
-      await db
-        .prepare(
-          `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, sort_order, flags, updated_at)
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, sort_order, flags, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-        )
-        .bind(setting.key, setting.value, setting.description, setting.type, setting.group_id, setting.sort_order, setting.flags)
-        .run();
-    }
+      )
+      .bind(setting.key, setting.value, setting.description, setting.type, setting.group_id, setting.sort_order, setting.flags)
+      .run();
   }
 }
 
@@ -328,54 +323,47 @@ export async function resetPreviewProvidersDefaults(db) {
 export async function addFileNamingStrategySetting(db) {
   console.log("开始添加文件命名策略系统设置...");
 
-  const existing = await db.prepare(`SELECT key FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind("file_naming_strategy").first();
-  if (!existing) {
-    const options = JSON.stringify([
-      { value: "overwrite", label: "覆盖模式" },
-      { value: "random_suffix", label: "随机后缀模式" },
-    ]);
+  const options = JSON.stringify([
+    { value: "overwrite", label: "覆盖模式" },
+    { value: "random_suffix", label: "随机后缀模式" },
+  ]);
 
-    await db
-      .prepare(
-        `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, options, sort_order, flags, updated_at)
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, options, sort_order, flags, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-      )
-      .bind(
-        "file_naming_strategy",
-        "overwrite",
-        "文件命名策略：覆盖模式使用原始文件名（可能冲突），随机后缀模式避免冲突且保持文件名可读性。",
-        "select",
-        1,
-        options,
-        4,
-        0,
-      )
-      .run();
-    console.log("成功添加文件命名策略设置");
-  }
+    )
+    .bind(
+      "file_naming_strategy",
+      "overwrite",
+      "文件命名策略：覆盖模式使用原始文件名（可能冲突），随机后缀模式避免冲突且保持文件名可读性。",
+      "select",
+      1,
+      options,
+      4,
+      0,
+    )
+    .run();
 }
 
 export async function addDefaultProxySetting(db) {
   console.log("开始添加默认代理设置...");
 
-  const existing = await db.prepare(`SELECT key FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind("default_use_proxy").first();
-  if (!existing) {
-    await db
-      .prepare(
-        `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, sort_order, flags, updated_at)
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, sort_order, flags, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-      )
-      .bind(
-        "default_use_proxy",
-        "false",
-        "文件管理的默认代理设置。启用后新上传文件默认使用Worker代理，禁用后默认使用直链。",
-        "bool",
-        1,
-        5,
-        0,
-      )
-      .run();
-  }
+    )
+    .bind(
+      "default_use_proxy",
+      "false",
+      "文件管理的默认代理设置。启用后新上传文件默认使用Worker代理，禁用后默认使用直链。",
+      "bool",
+      1,
+      5,
+      0,
+    )
+    .run();
 }
 
 export async function addSiteSettings(db) {
@@ -430,17 +418,13 @@ export async function addSiteSettings(db) {
   ];
 
   for (const setting of siteSettings) {
-    const existing = await db.prepare(`SELECT key FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind(setting.key).first();
-    if (!existing) {
-      await db
-        .prepare(
-          `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, options, sort_order, flags, updated_at)
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, options, sort_order, flags, updated_at)
          VALUES (?, ?, ?, ?, ?, NULL, ?, ?, CURRENT_TIMESTAMP)`,
-        )
-        .bind(setting.key, setting.value, setting.description, setting.type, setting.group_id, setting.sort_order, setting.flags)
-        .run();
-      console.log(`成功添加站点设置: ${setting.key}`);
-    }
+      )
+      .bind(setting.key, setting.value, setting.description, setting.type, setting.group_id, setting.sort_order, setting.flags)
+      .run();
   }
 }
 
@@ -469,19 +453,13 @@ export async function addCustomContentSettings(db) {
   ];
 
   for (const setting of customContentSettings) {
-    const existing = await db.prepare(`SELECT key FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind(setting.key).first();
-    if (!existing) {
-      await db
-        .prepare(
-          `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, options, sort_order, flags, updated_at)
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, options, sort_order, flags, updated_at)
          VALUES (?, ?, ?, ?, ?, NULL, ?, ?, CURRENT_TIMESTAMP)`,
-        )
-        .bind(setting.key, setting.value, setting.description, setting.type, setting.group_id, setting.sort_order, setting.flags)
-        .run();
-      console.log(`成功添加自定义内容设置: ${setting.key}`);
-    } else {
-      console.log(`自定义内容设置 ${setting.key} 已存在，跳过添加`);
-    }
+      )
+      .bind(setting.key, setting.value, setting.description, setting.type, setting.group_id, setting.sort_order, setting.flags)
+      .run();
   }
 
   console.log("自定义头部和body设置添加完成");
@@ -495,34 +473,22 @@ export async function addCustomContentSettings(db) {
 export async function createDefaultAdmin(db) {
   console.log("检查默认管理员账户...");
 
-  const adminCount = await db.prepare(`SELECT COUNT(*) as count FROM ${DbTables.ADMINS}`).first();
+  // Workers 冷启动并发下，用 INSERT OR IGNORE 避免 UNIQUE(username) 竞态导致 500
+  const adminId = crypto.randomUUID();
+  // 密码 "admin123" 的 SHA-256 哈希
+  const defaultPassword = "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9";
 
-  if (adminCount.count === 0) {
-    const adminId = crypto.randomUUID();
-    // 密码 "admin123" 的 SHA-256 哈希
-    const defaultPassword = "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9";
-
-    await db
-      .prepare(
-        `INSERT INTO ${DbTables.ADMINS} (id, username, password)
-         VALUES (?, ?, ?)`,
-      )
-      .bind(adminId, "admin", defaultPassword)
-      .run();
-
-    console.log("已创建默认管理员账户: admin/admin123");
-  }
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO ${DbTables.ADMINS} (id, username, password)
+       VALUES (?, ?, ?)`,
+    )
+    .bind(adminId, "admin", defaultPassword)
+    .run();
 }
 
 export async function createDefaultGuestApiKey(db) {
   console.log("检查默认游客 API 密钥...");
-
-  const guestCount = await db.prepare(`SELECT COUNT(*) as count FROM ${DbTables.API_KEYS} WHERE role = 'GUEST'`).first();
-
-  if (guestCount && guestCount.count > 0) {
-    console.log("已存在游客 API 密钥，跳过创建");
-    return;
-  }
 
   const id = crypto.randomUUID();
   const key = "guest";
@@ -530,13 +496,11 @@ export async function createDefaultGuestApiKey(db) {
 
   await db
     .prepare(
-      `INSERT INTO ${DbTables.API_KEYS} (id, name, key, permissions, role, basic_path, is_enable, expires_at)
+      `INSERT OR IGNORE INTO ${DbTables.API_KEYS} (id, name, key, permissions, role, basic_path, is_enable, expires_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(id, "guest", key, 0, "GUEST", "/", 0, expiresAt)
     .run();
-
-  console.log("已创建默认游客 API 密钥");
 }
 
 export default {
