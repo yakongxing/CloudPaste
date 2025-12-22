@@ -23,7 +23,7 @@ import scheduledRoutes from "./routes/scheduledRoutes.js";
 import { securityContext } from "./security/middleware/securityContext.js";
 import { withRepositories } from "./utils/repositories.js";
 import { errorBoundary } from "./http/middlewares/errorBoundary.js";
-import { normalizeError } from "./http/errors.js";
+import { normalizeError, sanitizeErrorMessageForClient } from "./http/errors.js";
 
 const getTimeSource = () => {
   if (typeof performance !== "undefined" && typeof performance.now === "function") {
@@ -151,7 +151,7 @@ app.use("*", async (c, next) => {
         "X-Share-Options",
       ],
       allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK", "HEAD"],
-      exposeHeaders: ["ETag", "Content-Length", "Content-Disposition", "Content-Range", "Accept-Ranges"],
+      exposeHeaders: ["ETag", "Content-Length", "Content-Disposition", "Content-Range", "Accept-Ranges", "X-Request-Id"],
       maxAge: 86400,
       credentials: true,
     });
@@ -214,11 +214,16 @@ app.onError((err, c) => {
   console.error(`[错误] ${normalized.publicMessage}`, err);
   const reqId = c.get("reqId");
   if (reqId) c.header("X-Request-Id", String(reqId));
+  const debugMessage = normalized.expose ? null : sanitizeErrorMessageForClient(normalized.originalError?.message || err);
   return c.json(
     createErrorResponse(
       normalized.status,
       normalized.expose ? normalized.publicMessage : "服务器内部错误",
-      normalized.code
+      normalized.code,
+      {
+        ...(reqId ? { requestId: String(reqId) } : {}),
+        ...(debugMessage ? { debugMessage } : {}),
+      }
     ),
     normalized.status
   );

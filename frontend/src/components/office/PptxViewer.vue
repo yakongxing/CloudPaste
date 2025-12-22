@@ -27,7 +27,7 @@
 <script setup>
 import { onMounted, onUnmounted, ref, watch, nextTick } from "vue";
 import { fetchFileBinaryWithAuth } from "@/api/services/fileDownloadService.js";
-import VueOfficePptx from "@vue-office/pptx";
+import VueOfficePptx from "@vue-office/pptx/lib/v3/index.js";
 import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 
 const props = defineProps({

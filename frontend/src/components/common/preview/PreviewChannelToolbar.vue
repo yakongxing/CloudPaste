@@ -42,35 +42,43 @@
 <script setup>
 import { IconCollapse, IconExpand } from "@/components/icons";
 
-const props = defineProps({
+defineProps({
+  /** 工具栏标题（可选，为空时不显示） */
   title: {
     type: String,
     default: "",
   },
+  /** 暗色模式 */
   darkMode: {
     type: Boolean,
     default: false,
   },
+  /** 渠道选项数组，格式：[{ key: string, label: string, url?: string }] */
   providerOptions: {
     type: Array,
     default: () => [],
   },
+  /** 当前选中的渠道 key（v-model） */
   modelValue: {
     type: String,
     default: "",
   },
+  /** 是否显示全屏按钮 */
   showFullscreen: {
     type: Boolean,
     default: true,
   },
+  /** 当前是否处于全屏状态 */
   isFullscreen: {
     type: Boolean,
     default: false,
   },
+  /** 进入全屏按钮的 title */
   fullscreenEnterTitle: {
     type: String,
     default: "全屏",
   },
+  /** 退出全屏按钮的 title */
   fullscreenExitTitle: {
     type: String,
     default: "退出全屏",
@@ -84,4 +92,3 @@ const handleProviderChange = (e) => {
   emit("update:modelValue", value);
 };
 </script>
-

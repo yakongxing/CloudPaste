@@ -27,8 +27,8 @@
 <script setup>
 import { onMounted, onUnmounted, ref, watch, nextTick } from "vue";
 import { fetchFileBinaryWithAuth } from "@/api/services/fileDownloadService.js";
-import VueOfficeExcel from "@vue-office/excel";
-import "@vue-office/excel/lib/index.css";
+import VueOfficeExcel from "@vue-office/excel/lib/v3/index.js";
+import "@vue-office/excel/lib/v3/index.css";
 import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 
 const props = defineProps({

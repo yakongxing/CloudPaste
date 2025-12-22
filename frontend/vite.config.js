@@ -468,7 +468,7 @@ export default defineConfig(({ command, mode }) => {
             "vendor-vue": ["vue", "vue-router", "vue-i18n"],
             "vendor-charts": ["chart.js", "vue-chartjs"],
             "vendor-utils": ["qrcode", "file-saver", "docx", "@zumer/snapdom"],
-            "office-viewer": ["docx-preview", "@vue-office/excel", "@vue-office/pptx"],
+            "office-viewer": ["docx-preview", "@vue-office/excel/lib/v3/index.js", "@vue-office/pptx/lib/v3/index.js"],
           },
         },
       },

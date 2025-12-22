@@ -201,14 +201,23 @@ function buildProvidersFromTemplate(providersConfig, vars) {
   const downloadUrl = vars.downloadUrl || "";
   const name = vars.name || "";
 
+  const base64EncodeUtf8 = (text) => {
+    if (!text) return "";
+    return Buffer.from(String(text), "utf8").toString("base64");
+  };
+
+  const b64PreviewUrl = previewUrl ? base64EncodeUtf8(previewUrl) : "";
+  const b64DownloadUrl = downloadUrl ? base64EncodeUtf8(downloadUrl) : "";
+
   const valueMap = {
-    $url: previewUrl,
-    $preview_url: previewUrl,
-    $download_url: downloadUrl,
     $name: name,
+    $e_name: name ? encodeURIComponent(name) : "",
+    $url: previewUrl,
     $e_url: previewUrl ? encodeURIComponent(previewUrl) : "",
-    $e_preview_url: previewUrl ? encodeURIComponent(previewUrl) : "",
     $e_download_url: downloadUrl ? encodeURIComponent(downloadUrl) : "",
+    // Base64 + URL-encode
+    $b64e_url: b64PreviewUrl ? encodeURIComponent(b64PreviewUrl) : "",
+    $b64e_download_url: b64DownloadUrl ? encodeURIComponent(b64DownloadUrl) : "",
   };
 
   for (const [providerKey, cfg] of Object.entries(providersConfig || {})) {
@@ -219,7 +228,7 @@ function buildProvidersFromTemplate(providersConfig, vars) {
     }
     let rendered = cfg.urlTemplate;
     rendered = rendered.replace(
-      /\$e_preview_url|\$e_download_url|\$preview_url|\$download_url|\$e_url|\$url|\$name/g,
+      /\$b64e_download_url|\$b64e_url|\$e_download_url|\$e_url|\$e_name|\$url|\$name/g,
       (token) => valueMap[token] ?? "",
     );
     if (rendered) {

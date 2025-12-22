@@ -174,200 +174,259 @@
                 <div
                   v-for="(rule, ruleIndex) in visualRules"
                   :key="rule.uid"
-                  class="rounded-lg border p-4 space-y-3"
+                  class="rounded-lg border p-4"
                   :class="darkMode ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'"
                 >
-                  <div class="flex items-center justify-between">
-                    <div class="text-sm font-medium" :class="darkMode ? 'text-gray-100' : 'text-gray-800'">
-                      {{ t("admin.preview.ruleTitle") }} #{{ ruleIndex + 1 }}
-                    </div>
-                    <button
-                      type="button"
-                      @click="removeRule(ruleIndex)"
-                      class="text-xs px-2 py-1 rounded transition"
-                      :class="
-                        darkMode
-                          ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30'
-                          : 'bg-red-50 text-red-600 hover:bg-red-100'
-                      "
-                    >
-                      {{ t("admin.preview.removeRule") }}
-                    </button>
-                  </div>
-
-                  <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                      <label class="block text-xs font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
-                        {{ t("admin.preview.ruleIdLabel") }}
-                      </label>
-                      <input
-                        v-model="rule.id"
-                        type="text"
-                        :placeholder="t('admin.preview.ruleIdPlaceholder')"
-                        class="w-full rounded border px-2 py-1 text-sm"
-                        :class="
-                          darkMode
-                            ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-500'
-                            : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400'
-                        "
-                      />
-                    </div>
-                    <div>
-                      <label class="block text-xs font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
-                        {{ t("admin.preview.rulePriorityLabel") }}
-                      </label>
-                      <input
-                        v-model.number="rule.priority"
-                        type="number"
-                        step="1"
-                        class="w-full rounded border px-2 py-1 text-sm"
-                        :class="
-                          darkMode
-                            ? 'bg-gray-800 border-gray-600 text-white'
-                            : 'bg-white border-gray-300 text-gray-800'
-                        "
-                      />
-                      <p class="mt-1 text-[11px]" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
-                        {{ t("admin.preview.rulePriorityHelp") }}
-                      </p>
-                    </div>
-                    <div>
-                      <label class="block text-xs font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
-                        {{ t("admin.preview.rulePreviewKeyLabel") }}<span class="text-red-500 ml-1">*</span>
-                      </label>
-                      <select
-                        v-model="rule.previewKey"
-                        class="w-full rounded border px-2 py-1 text-sm"
-                        :class="
-                          darkMode
-                            ? 'bg-gray-800 border-gray-600 text-white'
-                            : 'bg-white border-gray-300 text-gray-800'
-                        "
-                      >
-                        <option value="" disabled>{{ t("admin.preview.rulePreviewKeyPlaceholder") }}</option>
-                        <option v-for="opt in previewKeyOptions" :key="opt.value" :value="opt.value">
-                          {{ opt.label }}
-                        </option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-1 md:grid-cols-1 gap-3">
-                    <div>
-                      <label class="block text-xs font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
-                        {{ t("admin.preview.ruleMatchExtLabel") }}
-                      </label>
-                      <input
-                        v-model="rule.match.ext"
-                        type="text"
-                        :placeholder="t('admin.preview.ruleMatchExtPlaceholder')"
-                        class="w-full rounded border px-2 py-1 text-sm"
-                        :class="
-                          darkMode
-                            ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-500'
-                            : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400'
-                        "
-                      />
-                    </div>
-                  </div>
-
-                  <div class="mt-3">
-                    <label class="block text-xs font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
-                      {{ t("admin.preview.ruleMatchRegexLabel") }}
-                    </label>
-                    <input
-                      v-model="rule.match.regex"
-                      type="text"
-                      :placeholder="t('admin.preview.ruleMatchRegexPlaceholder')"
-                      class="w-full rounded border px-2 py-1 text-sm"
-                      :class="
-                        darkMode
-                          ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-500'
-                          : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400'
-                      "
-                    />
-                    <p class="mt-1 text-[11px]" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
-                      {{ t("admin.preview.ruleMatchHelp") }}
-                    </p>
-                  </div>
-
-                  <div class="space-y-2">
-                    <div class="flex items-center justify-between">
-                      <span class="text-xs font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
-                        {{ t("admin.preview.ruleProvidersLabel") }}<span v-if="isIframeRule(rule)" class="text-red-500 ml-1">*</span>
-                      </span>
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
                       <button
                         type="button"
-                        @click="addProvider(ruleIndex)"
-                        class="text-xs px-2 py-1 rounded transition"
-                        :class="
-                          darkMode
-                            ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30'
-                            : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
-                        "
+                        class="p-1 rounded transition-colors flex-shrink-0"
+                        :class="darkMode ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'"
+                        :title="isRuleCollapsed(rule) ? t('admin.preview.expandRule') : t('admin.preview.collapseRule')"
+                        @click="toggleRuleCollapsed(rule.uid)"
                       >
-                        {{ t("admin.preview.addProvider") }}
+                        <IconChevronRight
+                          size="sm"
+                          class="transition-transform duration-200"
+                          :class="isRuleCollapsed(rule) ? '' : 'rotate-90'"
+                          aria-hidden="true"
+                        />
                       </button>
+
+                      <div class="text-sm font-medium flex-shrink-0" :class="darkMode ? 'text-gray-100' : 'text-gray-800'">
+                        {{ t("admin.preview.ruleTitle") }} #{{ ruleIndex + 1 }}
+                      </div>
+
+                      <div
+                        v-if="isRuleCollapsed(rule)"
+                        class="text-xs truncate"
+                        :class="darkMode ? 'text-gray-400' : 'text-gray-500'"
+                        :title="getRuleSummary(rule)"
+                      >
+                        {{ getRuleSummary(rule) }}
+                      </div>
                     </div>
 
-                    <div v-if="isIframeRule(rule) && getIframeValidProviders(rule).length === 0" class="text-xs text-red-500">
-                      {{ t("admin.preview.previewRuleIframeNeedsProvider") }}
-                    </div>
-
-                    <div
-                      v-if="isIframeRule(rule) && rule.providers.some((p) => String(p?.urlTemplate || '').trim() === 'native')"
-                      class="text-xs text-red-500"
-                    >
-                      {{ t("admin.preview.previewRuleIframeNativeNotAllowed") }}
-                    </div>
-
-                    <div v-if="getDuplicateProviderKeys(rule).length" class="text-xs text-red-500">
-                      {{ t("admin.preview.previewRuleDuplicateProviderKeys", { keys: getDuplicateProviderKeys(rule).join(', ') }) }}
-                    </div>
-
-                    <div
-                      v-if="!rule.providers.length"
-                      class="py-3 text-center text-xs rounded border border-dashed"
-                      :class="darkMode ? 'border-gray-700 text-gray-500' : 'border-gray-200 text-gray-400'"
-                    >
-                      {{ t("admin.preview.ruleProvidersEmpty") }}
-                    </div>
-
-                    <div v-for="(provider, providerIndex) in rule.providers" :key="provider.uid" class="grid grid-cols-1 md:grid-cols-6 gap-2">
-                      <input
-                        v-model="provider.key"
-                        type="text"
-                        :placeholder="t('admin.preview.ruleProviderKeyPlaceholder')"
-                        class="rounded border px-2 py-1 text-sm md:col-span-2"
-                        :class="
-                          darkMode
-                            ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-500'
-                            : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400'
-                        "
-                      />
-                      <input
-                        v-model="provider.urlTemplate"
-                        type="text"
-                        :placeholder="t('admin.preview.ruleProviderUrlPlaceholder')"
-                        class="rounded border px-2 py-1 text-sm md:col-span-3"
-                        :class="
-                          darkMode
-                            ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-500'
-                            : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400'
-                        "
-                      />
+                    <div class="flex items-center gap-2 flex-shrink-0">
                       <button
                         type="button"
-                        @click="removeProvider(ruleIndex, providerIndex)"
-                        class="text-xs px-2 py-1 rounded transition md:col-span-1"
+                        class="p-1 rounded transition-colors"
+                        :class="[
+                          darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100',
+                          ruleIndex === 0 ? 'opacity-40 cursor-not-allowed' : (darkMode ? 'text-gray-300' : 'text-gray-600'),
+                        ]"
+                        :disabled="ruleIndex === 0"
+                        :title="t('admin.preview.moveRuleUp')"
+                        @click="moveRuleUp(ruleIndex)"
+                      >
+                        <IconChevronUp size="sm" aria-hidden="true" />
+                      </button>
+
+                      <button
+                        type="button"
+                        class="p-1 rounded transition-colors"
+                        :class="[
+                          darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100',
+                          ruleIndex === visualRules.length - 1 ? 'opacity-40 cursor-not-allowed' : (darkMode ? 'text-gray-300' : 'text-gray-600'),
+                        ]"
+                        :disabled="ruleIndex === visualRules.length - 1"
+                        :title="t('admin.preview.moveRuleDown')"
+                        @click="moveRuleDown(ruleIndex)"
+                      >
+                        <IconChevronDown size="sm" aria-hidden="true" />
+                      </button>
+
+                      <button
+                        type="button"
+                        @click="removeRule(ruleIndex)"
+                        class="text-xs px-2 py-1 rounded transition"
                         :class="
                           darkMode
                             ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30'
                             : 'bg-red-50 text-red-600 hover:bg-red-100'
                         "
                       >
-                        {{ t("admin.preview.removeProvider") }}
+                        {{ t("admin.preview.removeRule") }}
                       </button>
+                    </div>
+                  </div>
+
+                  <div v-show="!isRuleCollapsed(rule)" class="space-y-3">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label class="block text-xs font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
+                          {{ t("admin.preview.ruleIdLabel") }}
+                        </label>
+                        <input
+                          v-model="rule.id"
+                          type="text"
+                          :placeholder="t('admin.preview.ruleIdPlaceholder')"
+                          class="w-full rounded border px-2 py-1 text-sm"
+                          :class="
+                            darkMode
+                              ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-500'
+                              : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400'
+                          "
+                        />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
+                          {{ t("admin.preview.rulePriorityLabel") }}
+                        </label>
+                        <input
+                          v-model.number="rule.priority"
+                          type="number"
+                          step="1"
+                          class="w-full rounded border px-2 py-1 text-sm"
+                          :class="
+                            darkMode
+                              ? 'bg-gray-800 border-gray-600 text-white'
+                              : 'bg-white border-gray-300 text-gray-800'
+                          "
+                        />
+                        <p class="mt-1 text-[11px]" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
+                          {{ t("admin.preview.rulePriorityHelp") }}
+                        </p>
+                      </div>
+                      <div>
+                        <label class="block text-xs font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
+                          {{ t("admin.preview.rulePreviewKeyLabel") }}<span class="text-red-500 ml-1">*</span>
+                        </label>
+                        <select
+                          v-model="rule.previewKey"
+                          class="w-full rounded border px-2 py-1 text-sm"
+                          :class="
+                            darkMode
+                              ? 'bg-gray-800 border-gray-600 text-white'
+                              : 'bg-white border-gray-300 text-gray-800'
+                          "
+                        >
+                          <option value="" disabled>{{ t("admin.preview.rulePreviewKeyPlaceholder") }}</option>
+                          <option v-for="opt in previewKeyOptions" :key="opt.value" :value="opt.value">
+                            {{ opt.label }}
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-1 gap-3">
+                      <div>
+                        <label class="block text-xs font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
+                          {{ t("admin.preview.ruleMatchExtLabel") }}
+                        </label>
+                        <input
+                          v-model="rule.match.ext"
+                          type="text"
+                          :placeholder="t('admin.preview.ruleMatchExtPlaceholder')"
+                          class="w-full rounded border px-2 py-1 text-sm"
+                          :class="
+                            darkMode
+                              ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-500'
+                              : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400'
+                          "
+                        />
+                      </div>
+                    </div>
+
+                    <div class="mt-3">
+                      <label class="block text-xs font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
+                        {{ t("admin.preview.ruleMatchRegexLabel") }}
+                      </label>
+                      <input
+                        v-model="rule.match.regex"
+                        type="text"
+                        :placeholder="t('admin.preview.ruleMatchRegexPlaceholder')"
+                        class="w-full rounded border px-2 py-1 text-sm"
+                        :class="
+                          darkMode
+                            ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-500'
+                            : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400'
+                        "
+                      />
+                      <p class="mt-1 text-[11px]" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
+                        {{ t("admin.preview.ruleMatchHelp") }}
+                      </p>
+                    </div>
+
+                    <div class="space-y-2">
+                      <div class="flex items-center justify-between">
+                        <span class="text-xs font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
+                          {{ t("admin.preview.ruleProvidersLabel") }}<span v-if="isIframeRule(rule)" class="text-red-500 ml-1">*</span>
+                        </span>
+                        <button
+                          type="button"
+                          @click="addProvider(ruleIndex)"
+                          class="text-xs px-2 py-1 rounded transition"
+                          :class="
+                            darkMode
+                              ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30'
+                              : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                          "
+                        >
+                          {{ t("admin.preview.addProvider") }}
+                        </button>
+                      </div>
+
+                      <div v-if="isIframeRule(rule) && getIframeValidProviders(rule).length === 0" class="text-xs text-red-500">
+                        {{ t("admin.preview.previewRuleIframeNeedsProvider") }}
+                      </div>
+
+                      <div
+                        v-if="isIframeRule(rule) && rule.providers.some((p) => String(p?.urlTemplate || '').trim() === 'native')"
+                        class="text-xs text-red-500"
+                      >
+                        {{ t("admin.preview.previewRuleIframeNativeNotAllowed") }}
+                      </div>
+
+                      <div v-if="getDuplicateProviderKeys(rule).length" class="text-xs text-red-500">
+                        {{ t("admin.preview.previewRuleDuplicateProviderKeys", { keys: getDuplicateProviderKeys(rule).join(', ') }) }}
+                      </div>
+
+                      <div
+                        v-if="!rule.providers.length"
+                        class="py-3 text-center text-xs rounded border border-dashed"
+                        :class="darkMode ? 'border-gray-700 text-gray-500' : 'border-gray-200 text-gray-400'"
+                      >
+                        {{ t("admin.preview.ruleProvidersEmpty") }}
+                      </div>
+
+                      <div v-for="(provider, providerIndex) in rule.providers" :key="provider.uid" class="grid grid-cols-1 md:grid-cols-6 gap-2">
+                        <input
+                          v-model="provider.key"
+                          type="text"
+                          :placeholder="t('admin.preview.ruleProviderKeyPlaceholder')"
+                          class="rounded border px-2 py-1 text-sm md:col-span-2"
+                          :class="
+                            darkMode
+                              ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-500'
+                              : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400'
+                          "
+                        />
+                        <input
+                          v-model="provider.urlTemplate"
+                          type="text"
+                          :placeholder="t('admin.preview.ruleProviderUrlPlaceholder')"
+                          class="rounded border px-2 py-1 text-sm md:col-span-3"
+                          :class="
+                            darkMode
+                              ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-500'
+                              : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400'
+                          "
+                        />
+                        <button
+                          type="button"
+                          @click="removeProvider(ruleIndex, providerIndex)"
+                          class="text-xs px-2 py-1 rounded transition md:col-span-1"
+                          :class="
+                            darkMode
+                              ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30'
+                              : 'bg-red-50 text-red-600 hover:bg-red-100'
+                          "
+                        >
+                          {{ t("admin.preview.removeProvider") }}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -452,7 +511,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { IconRefresh, IconCollection, IconPlus } from "@/components/icons";
+import { IconRefresh, IconCollection, IconPlus, IconChevronDown, IconChevronRight, IconChevronUp } from "@/components/icons";
 import { useAdminSystemService } from "@/modules/admin/services/systemService.js";
 import { useThemeMode } from "@/composables/core/useThemeMode.js";
 import { useGlobalMessage } from "@/composables/core/useGlobalMessage.js";
@@ -479,7 +538,28 @@ const providerModes = Object.freeze({
 });
 const providerMode = ref(providerModes.visual);
 const visualRules = ref([]);
+const collapsedRuleUids = ref({});
 let ruleCounter = 0;
+
+const isRuleCollapsed = (rule) => Boolean(collapsedRuleUids.value[String(rule?.uid || "")]);
+
+const toggleRuleCollapsed = (uid) => {
+  const key = String(uid || "");
+  if (!key) return;
+  collapsedRuleUids.value[key] = !collapsedRuleUids.value[key];
+};
+
+const getRuleSummary = (rule) => {
+  const previewKey = String(rule?.previewKey || "").trim() || "-";
+  const priority = Number.isFinite(rule?.priority) ? String(rule.priority) : "0";
+  const ext = String(rule?.match?.ext || "").trim();
+  const regex = String(rule?.match?.regex || "").trim();
+
+  const parts = [`类型:${previewKey}`, `优先级:${priority}`];
+  if (ext) parts.push(`ext:${ext}`);
+  if (regex) parts.push(`regex:${regex}`);
+  return parts.join(" / ");
+};
 
 
 const normalizePreviewKey = (value) => {
@@ -641,6 +721,7 @@ const syncVisualRulesFromJson = (rawValue) => {
   const raw = rawValue || "";
   if (!raw.trim()) {
     visualRules.value = [];
+    collapsedRuleUids.value = {};
     return true;
   }
   try {
@@ -649,6 +730,7 @@ const syncVisualRulesFromJson = (rawValue) => {
       return false;
     }
     visualRules.value = parsed.map((rule) => createRule(rule));
+    collapsedRuleUids.value = {};
     return true;
   } catch (error) {
     console.error("预览规则配置 JSON 解析失败:", error);
@@ -702,18 +784,38 @@ const handleSwitchProviderMode = (mode) => {
 };
 
 const addRule = () => {
-  visualRules.value.push(
-    createRule({
-      priority: 0,
-      previewKey: "",
-      match: { ext: "", regex: "" },
-      providers: {},
-    }),
-  );
+  const rule = createRule({
+    priority: 0,
+    previewKey: "",
+    match: { ext: "", regex: "" },
+    providers: {},
+  });
+  visualRules.value.push(rule);
+  collapsedRuleUids.value[rule.uid] = false;
 };
 
 const removeRule = (index) => {
+  const rule = visualRules.value[index];
   visualRules.value.splice(index, 1);
+  if (rule?.uid) {
+    delete collapsedRuleUids.value[rule.uid];
+  }
+};
+
+const moveRuleUp = (index) => {
+  const list = visualRules.value;
+  if (!Array.isArray(list)) return;
+  if (index <= 0 || index >= list.length) return;
+  const current = list.splice(index, 1)[0];
+  list.splice(index - 1, 0, current);
+};
+
+const moveRuleDown = (index) => {
+  const list = visualRules.value;
+  if (!Array.isArray(list)) return;
+  if (index < 0 || index >= list.length - 1) return;
+  const current = list.splice(index, 1)[0];
+  list.splice(index + 1, 0, current);
 };
 
 const addProvider = (ruleIndex) => {

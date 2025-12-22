@@ -3,14 +3,11 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# 安装必要的系统依赖
-RUN apk add --no-cache git
+# 复制依赖（利用 Docker layer cache）
+COPY frontend/package.json frontend/package-lock.json ./
 
-# 复制前端package.json
-COPY frontend/package.json ./
-
-# 安装依赖 - 使用npm install重新生成lock文件
-RUN npm install --cache /tmp/npm-cache
+# 安装依赖（使用 lock 文件，关闭 audit/fund 减少噪音）
+RUN npm ci --cache /tmp/npm-cache --no-audit --no-fund
 
 # 复制前端源代码
 COPY frontend/ ./
@@ -43,4 +40,4 @@ RUN chmod +x /entrypoint.sh
 EXPOSE 80
 
 # 使用启动脚本
-CMD ["/entrypoint.sh"] 
+CMD ["/entrypoint.sh"]

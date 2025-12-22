@@ -1,17 +1,7 @@
 <template>
-  <div class="iframe-preview rounded-lg overflow-hidden mb-2 flex-grow w-full relative border border-gray-200 dark:border-gray-700">
-    <div class="flex items-center justify-end px-2 py-1 bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-      <select
-        v-if="providerOptions.length > 1"
-        v-model="selectedProviderKey"
-        class="text-xs px-2 py-1 rounded border bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
-      >
-        <option v-for="opt in providerOptions" :key="opt.key" :value="opt.key">
-          {{ opt.label }}
-        </option>
-      </select>
-    </div>
-    <div class="iframe-container relative w-full h-[calc(100vh-350px)] min-h-[300px]">
+  <!-- iframe 预览组件：纯内容渲染，工具栏由父组件通过 PreviewChannelToolbar 统一管理 -->
+  <div class="iframe-preview h-full rounded-lg overflow-hidden flex-grow w-full relative border border-gray-200 dark:border-gray-700">
+    <div class="iframe-container relative w-full h-full min-h-[300px]">
       <iframe
         :src="currentPreviewUrl"
         frameborder="0"
@@ -45,34 +35,61 @@ import { useProviderSelector } from "@/composables/file-preview/useProviderSelec
 const { t } = useI18n();
 
 const props = defineProps({
+  /** 预览渠道配置对象，格式：{ key: url } */
   providers: {
     type: Object,
     default: () => ({}),
   },
+  /** 暗色模式 */
   darkMode: {
     type: Boolean,
     default: false,
   },
+  /** 加载中提示文本 */
   loadingText: {
     type: String,
     default: "",
   },
+  /** 错误提示文本 */
   errorText: {
+    type: String,
+    default: "",
+  },
+  /** 外部传入的选中渠道 key（可选，用于父组件控制） */
+  selectedProvider: {
     type: String,
     default: "",
   },
 });
 
-const emit = defineEmits(["load", "error"]);
+const emit = defineEmits(["load", "error", "provider-options"]);
 
 const loading = ref(true);
 const error = ref(false);
 
-const { providerOptions, selectedKey: selectedProviderKey, currentUrl: currentPreviewUrl } = useProviderSelector({
+const { providerOptions, selectedKey: internalSelectedKey, currentUrl: currentPreviewUrl } = useProviderSelector({
   providers: computed(() => props.providers || {}),
   nativeUrl: "",
   filter: ({ url }) => url !== "native",
 });
+
+watch(
+  () => props.selectedProvider,
+  (newKey) => {
+    if (newKey && providerOptions.value.some((opt) => opt.key === newKey)) {
+      internalSelectedKey.value = newKey;
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  providerOptions,
+  (options) => {
+    emit("provider-options", options);
+  },
+  { immediate: true }
+);
 
 const handleLoad = () => {
   loading.value = false;
@@ -93,6 +110,13 @@ watch(
     loading.value = true;
     error.value = false;
   },
-  { immediate: true },
+  { immediate: true }
 );
+
+// 暴露给父组件的方法和状态
+defineExpose({
+  providerOptions,
+  selectedKey: internalSelectedKey,
+  currentUrl: currentPreviewUrl,
+});
 </script>

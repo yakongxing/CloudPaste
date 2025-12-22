@@ -60,50 +60,53 @@
         </div>
       </div>
 
-      <!-- 文本预览工具栏 -->
-      <div v-if="isText" class="text-preview-toolbar p-3 mb-4 rounded-lg bg-opacity-50" :class="darkMode ? 'bg-gray-700/50' : 'bg-gray-100'">
-        <!-- 响应式布局：桌面端横向，移动端纵向 -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <!-- 左侧控制区：模式切换器和编码选择器 -->
-          <div class="toolbar-left flex flex-wrap items-center gap-3">
-            <div class="mode-switcher">
-              <select
-                v-model="textPreviewMode"
-                class="mode-select px-3 py-1 text-sm border rounded"
-                :class="darkMode ? 'bg-gray-600 border-gray-500 text-gray-200' : 'bg-white border-gray-300 text-gray-700'"
-              >
-                <option v-for="mode in availablePreviewModes" :key="mode.value" :value="mode.value">
-                  {{ mode.label }}
-                </option>
-              </select>
-            </div>
+      <!-- 非全屏：工具栏和内容分离（保持你原来的布局习惯） -->
+      <PreviewChannelToolbar
+        v-if="!isContentFullscreen"
+        :title="toolbarTitle"
+        :dark-mode="darkMode"
+        :provider-options="toolbarProviderOptions"
+        v-model="toolbarProviderKey"
+        :is-fullscreen="isContentFullscreen"
+        :fullscreen-enter-title="$t('mount.filePreview.fullscreen')"
+        :fullscreen-exit-title="$t('mount.filePreview.exitFullscreen')"
+        @toggle-fullscreen="toggleFullscreen"
+      >
+        <template #left>
+          <template v-if="isText">
+            <select
+              v-model="textPreviewMode"
+              class="mode-select px-3 py-1 text-sm border rounded"
+              :class="darkMode ? 'bg-gray-600 border-gray-500 text-gray-200' : 'bg-white border-gray-300 text-gray-700'"
+            >
+              <option v-for="mode in availablePreviewModes" :key="mode.value" :value="mode.value">
+                {{ mode.label }}
+              </option>
+            </select>
 
-            <div class="encoding-selector">
-              <select
-                v-model="textEncoding"
-                class="encoding-select px-3 py-1 text-sm border rounded"
-                :class="darkMode ? 'bg-gray-600 border-gray-500 text-gray-200' : 'bg-white border-gray-300 text-gray-700'"
-              >
-                <option v-for="encoding in availableEncodings" :key="encoding.value" :value="encoding.value" :title="encoding.description">
-                  {{ encoding.label }}
-                </option>
-              </select>
-            </div>
-          </div>
+            <select
+              v-model="textEncoding"
+              class="encoding-select px-3 py-1 text-sm border rounded"
+              :class="darkMode ? 'bg-gray-600 border-gray-500 text-gray-200' : 'bg-white border-gray-300 text-gray-700'"
+            >
+              <option v-for="encoding in availableEncodings" :key="encoding.value" :value="encoding.value" :title="encoding.description">
+                {{ encoding.label }}
+              </option>
+            </select>
+          </template>
+        </template>
 
-          <!-- 右侧按钮区：保存和全屏按钮 -->
-          <div class="toolbar-right flex flex-wrap items-center gap-2">
-            <!-- 右键菜单提示图标 -->
+        <template #right>
+          <template v-if="isText">
             <div
-            v-if="textPreviewMode === 'edit'"
-            class="context-menu-hint flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200 cursor-help hover:scale-110"
-            :class="darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-100/50'"
-            :title="$t('mount.filePreview.rightClickHint')"
-          >
+              v-if="textPreviewMode === 'edit'"
+              class="context-menu-hint flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200 cursor-help hover:scale-110"
+              :class="darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-100/50'"
+              :title="$t('mount.filePreview.rightClickHint')"
+            >
               <IconError class="text-yellow-500" aria-hidden="true" />
             </div>
 
-            <!-- 保存按钮 - 仅在编辑模式下显示 -->
             <button
               v-if="textPreviewMode === 'edit'"
               @click="handleSaveFile"
@@ -115,63 +118,13 @@
               ]"
               :title="$t('mount.filePreview.saveFileShortcut')"
             >
-              <!-- Loading图标 -->
               <IconRefresh v-if="isSaving" class="w-4 h-4 mr-1 animate-spin" aria-hidden="true" />
-              <!-- 保存图标 -->
               <IconSave v-else size="sm" class="mr-1" aria-hidden="true" />
               {{ isSaving ? $t("mount.filePreview.saving") : $t("mount.filePreview.save") }}
             </button>
-
-            <!-- 全屏按钮 -->
-            <button
-              @click="toggleFullscreen"
-            class="fullscreen-btn flex items-center px-3 py-1 text-sm border rounded transition-colors"
-            :class="darkMode ? 'bg-gray-600 hover:bg-gray-700 border-gray-500 text-gray-200' : 'bg-white hover:bg-gray-50 border-gray-300 text-gray-700'"
-            :title="isContentFullscreen ? $t('mount.filePreview.exitFullscreen') : $t('mount.filePreview.fullscreen')"
-          >
-              <IconExpand v-if="!isContentFullscreen" size="sm" aria-hidden="true" />
-              <IconCollapse v-else size="sm" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- PDF / Office / EPUB：统一的“渠道选择 + 全屏”工具栏 -->
-      <PreviewChannelToolbar
-        v-if="isPdf"
-        title="PDF"
-        :dark-mode="darkMode"
-        :provider-options="pdfProviderOptions"
-        v-model="selectedPdfProvider"
-        :is-fullscreen="isContentFullscreen"
-        :fullscreen-enter-title="$t('mount.filePreview.fullscreen')"
-        :fullscreen-exit-title="$t('mount.filePreview.exitFullscreen')"
-        @toggle-fullscreen="toggleFullscreen"
-      />
-
-      <PreviewChannelToolbar
-        v-if="isOffice"
-        :title="officeTypeDisplayName"
-        :dark-mode="darkMode"
-        :provider-options="officeProviderOptions"
-        v-model="selectedOfficeProvider"
-        :is-fullscreen="isContentFullscreen"
-        :fullscreen-enter-title="$t('mount.filePreview.fullscreen')"
-        :fullscreen-exit-title="$t('mount.filePreview.exitFullscreen')"
-        @toggle-fullscreen="toggleFullscreen"
-      />
-
-      <PreviewChannelToolbar
-        v-if="isEpub"
-        title="EPUB"
-        :dark-mode="darkMode"
-        :provider-options="epubProviderOptions"
-        v-model="selectedEpubProvider"
-        :is-fullscreen="isContentFullscreen"
-        :fullscreen-enter-title="$t('mount.filePreview.fullscreen')"
-        :fullscreen-exit-title="$t('mount.filePreview.exitFullscreen')"
-        @toggle-fullscreen="toggleFullscreen"
-      />
+          </template>
+        </template>
+      </PreviewChannelToolbar>
 
       <!-- 预览内容 -->
       <div
@@ -180,45 +133,59 @@
         :class="[darkMode ? 'border-gray-700' : 'border-gray-200']"
         :style="previewContainerStyle"
       >
-        <!-- 全屏模式下的工具栏 -->
-        <div v-if="isContentFullscreen && isText" class="fullscreen-toolbar p-3 border-b" :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'">
-          <!-- 响应式布局：桌面端横向，移动端纵向 -->
+        <!-- 全屏：在全屏容器里显示一条“内置工具栏”（按你说的：像以前文本全屏那条一样） -->
+        <div
+          v-if="isContentFullscreen"
+          class="fullscreen-toolbar sticky top-0 z-20 p-3 border-b"
+          :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'"
+        >
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <!-- 左侧：文件信息 -->
-            <div class="toolbar-left flex flex-wrap items-center gap-3">
-              <h3 class="text-lg font-medium" :class="darkMode ? 'text-gray-200' : 'text-gray-800'">{{ file.name }}</h3>
-              <span class="text-sm" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">{{
-                textPreviewMode === "edit" ? $t("mount.filePreview.editMode") : $t("mount.filePreview.previewMode")
-              }}</span>
+            <div class="toolbar-left flex flex-wrap items-center gap-3 min-w-0">
+              <h3 class="text-lg font-medium truncate" :class="darkMode ? 'text-gray-200' : 'text-gray-800'" :title="file.name">{{ file.name }}</h3>
+              <span class="text-sm" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">{{ toolbarTitle }}</span>
             </div>
 
             <!-- 右侧：控制按钮 -->
             <div class="toolbar-right flex flex-wrap items-center gap-2">
-              <!-- 模式切换 -->
+              <!-- 文本类：模式切换 + 编码 -->
+              <template v-if="isText">
+                <select
+                  v-model="textPreviewMode"
+                  class="mode-select px-2 py-1 text-sm border rounded"
+                  :class="darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'"
+                >
+                  <option v-for="mode in availablePreviewModes" :key="mode.value" :value="mode.value">
+                    {{ mode.label }}
+                  </option>
+                </select>
+
+                <select
+                  v-model="textEncoding"
+                  class="encoding-select px-2 py-1 text-sm border rounded"
+                  :class="darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'"
+                >
+                  <option v-for="encoding in availableEncodings" :key="encoding.value" :value="encoding.value" :title="encoding.description">
+                    {{ encoding.label }}
+                  </option>
+                </select>
+              </template>
+
+              <!-- 渠道选择：PDF/Office/EPUB/Iframe（多于 1 个时才显示） -->
               <select
-                v-model="textPreviewMode"
-                class="mode-select px-2 py-1 text-sm border rounded"
+                v-if="toolbarProviderOptions.length > 1"
+                v-model="toolbarProviderKey"
+                class="px-2 py-1 text-sm border rounded"
                 :class="darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'"
               >
-                <option v-for="mode in availablePreviewModes" :key="mode.value" :value="mode.value">
-                  {{ mode.label }}
+                <option v-for="opt in toolbarProviderOptions" :key="opt.key" :value="opt.key">
+                  {{ opt.label }}
                 </option>
               </select>
 
-              <!-- 编码选择 -->
-              <select
-                v-model="textEncoding"
-                class="encoding-select px-2 py-1 text-sm border rounded"
-                :class="darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'"
-              >
-                <option v-for="encoding in availableEncodings" :key="encoding.value" :value="encoding.value" :title="encoding.description">
-                  {{ encoding.label }}
-                </option>
-              </select>
-
-              <!-- 保存按钮 -->
+              <!-- 文本类：保存按钮（仅编辑模式） -->
               <button
-                v-if="textPreviewMode === 'edit'"
+                v-if="isText && textPreviewMode === 'edit'"
                 @click="handleSaveFile"
                 :disabled="isSaving"
                 class="save-btn flex items-center px-2 py-1 text-sm border rounded transition-colors"
@@ -228,9 +195,7 @@
                 ]"
                 :title="$t('mount.filePreview.saveFileShortcut')"
               >
-                <!-- Loading图标 -->
                 <IconRefresh v-if="isSaving" class="w-4 h-4 mr-1 animate-spin" aria-hidden="true" />
-                <!-- 保存图标 -->
                 <IconSave v-else size="sm" class="mr-1" aria-hidden="true" />
                 {{ isSaving ? $t("mount.filePreview.saving") : $t("mount.filePreview.save") }}
               </button>
@@ -240,7 +205,7 @@
                 @click="toggleFullscreen"
                 class="exit-fullscreen-btn flex items-center px-2 py-1 text-sm border rounded transition-colors"
                 :class="darkMode ? 'bg-gray-600 hover:bg-gray-700 border-gray-500 text-gray-200' : 'bg-white hover:bg-gray-50 border-gray-300 text-gray-700'"
-                title="退出全屏"
+                :title="$t('mount.filePreview.exitFullscreen')"
               >
                 <IconCollapse size="sm" aria-hidden="true" />
               </button>
@@ -367,8 +332,10 @@
             :dark-mode="darkMode"
             :loading-text="t('mount.filePreview.loadingPreview')"
             :error-text="t('mount.filePreview.previewError')"
+            :selected-provider="selectedIframeProvider"
             @load="handleContentLoaded"
             @error="handleContentError"
+            @provider-options="handleIframeProviderOptions"
           />
         </div>
 
@@ -449,7 +416,7 @@
 <script setup>
 import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
-import { IconCollapse, IconDocument, IconDownload, IconError, IconExclamationSolid, IconExpand, IconEye, IconLink, IconRefresh, IconSave } from "@/components/icons";
+import { IconCollapse, IconDocument, IconDownload, IconError, IconExclamationSolid, IconEye, IconLink, IconRefresh, IconSave } from "@/components/icons";
 import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 import { usePreviewRenderers, useFilePreviewExtensions, useFileSave, resolvePreviewSelection, PREVIEW_KEYS } from "@/composables/index.js";
 import { useProviderSelector } from "@/composables/file-preview/useProviderSelector.js";
@@ -614,6 +581,80 @@ const textPreviewMode = ref("text");
 const textEncoding = ref("utf-8");
 const textPreviewRef = ref(null);
 const userHasManuallyChanged = ref(false);
+
+// 文本预览标题（根据当前模式动态显示）
+const textPreviewTitle = computed(() => {
+  const modeLabels = {
+    text: t("mount.filePreview.textPreview"),
+    code: t("mount.filePreview.codePreview"),
+    markdown: "Markdown",
+    html: "HTML",
+    edit: t("mount.filePreview.editMode"),
+  };
+  return modeLabels[textPreviewMode.value] || t("mount.filePreview.textPreview");
+});
+
+// iframe 预览状态管理
+const selectedIframeProvider = ref("");
+const iframeProviderOptionsForToolbar = ref([]);
+
+// 处理 iframe 组件传递的 provider options
+const handleIframeProviderOptions = (options) => {
+  const list = Array.isArray(options) ? options : [];
+  iframeProviderOptionsForToolbar.value = list;
+
+  // 没有可用 provider 时，清空选中值，避免下拉框出现“空值但还显示”的怪状态
+  if (!list.length) {
+    selectedIframeProvider.value = "";
+    return;
+  }
+
+  // 如果当前选中值不存在于新的 options 里，默认选中第一个（比如切换文件/规则后）
+  const exists = list.some((opt) => opt.key === selectedIframeProvider.value);
+  if (!exists) {
+    selectedIframeProvider.value = list[0].key;
+  }
+};
+
+// ===== 统一工具栏（放在 previewContentRef 内，保证全屏时也能显示）=====
+
+const toolbarTitle = computed(() => {
+  if (isText.value) return textPreviewTitle.value;
+  if (isPdf.value) return "PDF";
+  if (isOffice.value) return officeTypeDisplayName.value;
+  if (isEpub.value) return "EPUB";
+  if (isImage.value) return t("mount.filePreview.imagePreview");
+  if (isVideo.value) return t("mount.filePreview.videoPreview");
+  if (isAudio.value) return t("mount.filePreview.audioPreview");
+  if (isIframe.value) return t("mount.filePreview.iframePreview");
+  if (isArchive.value) return t("mount.filePreview.archivePreview");
+  return t("mount.filePreview.previewTypeOther");
+});
+
+const toolbarProviderOptions = computed(() => {
+  if (isPdf.value) return pdfProviderOptions.value;
+  if (isOffice.value) return officeProviderOptions.value;
+  if (isEpub.value) return epubProviderOptions.value;
+  if (isIframe.value) return iframeProviderOptionsForToolbar.value;
+  return [];
+});
+
+const toolbarProviderKey = computed({
+  get() {
+    if (isPdf.value) return selectedPdfProvider.value;
+    if (isOffice.value) return selectedOfficeProvider.value;
+    if (isEpub.value) return selectedEpubProvider.value;
+    if (isIframe.value) return selectedIframeProvider.value;
+    return "";
+  },
+  set(value) {
+    const key = String(value || "");
+    if (isPdf.value) selectedPdfProvider.value = key;
+    if (isOffice.value) selectedOfficeProvider.value = key;
+    if (isEpub.value) selectedEpubProvider.value = key;
+    if (isIframe.value) selectedIframeProvider.value = key;
+  },
+});
 
 // PDF 预览：统一用通用 providers 选择器
 const {
@@ -984,20 +1025,28 @@ onBeforeUnmount(() => {
   width: 100% !important;
 }
 
+/* 全屏模式下 iframe 预览填满容器 */
+:deep(:fullscreen .iframe-preview) {
+  height: 100% !important;
+  max-height: none !important;
+}
+
+:deep(:fullscreen .iframe-container) {
+  height: 100% !important;
+  min-height: unset !important;
+}
+
+:deep(:fullscreen .iframe-preview iframe) {
+  height: 100% !important;
+  width: 100% !important;
+}
+
 /* 确保全屏模式下的控制栏固定在顶部 */
 :deep(:fullscreen .sticky) {
   position: sticky;
   top: 0;
   z-index: 20;
   width: 100%;
-}
-
-/* 全屏模式下的工具栏样式 */
-:deep(:fullscreen .fullscreen-toolbar) {
-  position: sticky;
-  top: 0;
-  z-index: 21;
-  background-color: inherit;
 }
 
 /* 全屏模式下的文本容器 */
@@ -1007,21 +1056,14 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
-/* 全屏模式下工具栏的暗色主题适配 */
-:deep(:fullscreen .fullscreen-toolbar.bg-gray-800) {
-  background-color: #1f2937 !important;
-  border-color: #374151 !important;
-}
-
-:deep(:fullscreen .fullscreen-toolbar.bg-white) {
-  background-color: #ffffff !important;
-  border-color: #e5e7eb !important;
-}
-
 /* 全屏按钮悬停效果增强 */
 button:hover svg {
   transform: scale(1.05);
   transition: transform 0.2s ease;
+}
+
+.fullscreen-toolbar {
+  flex-shrink: 0;
 }
 
 /* Markdown预览样式 */
@@ -1287,16 +1329,7 @@ button:hover svg {
   color: #db8942 !important;
 }
 
-/* 上面是旧的 */
-
-/* 全屏模式样式 */
-.preview-content-fullscreen {
-  background-color: var(--bg-color);
-}
-
-.fullscreen-toolbar {
-  flex-shrink: 0;
-}
+/* 上面是旧的：历史遗留样式（已不再使用） */
 
 .fullscreen-text-container {
   height: calc(100vh - 60px); /* 减去工具栏高度 */
@@ -1315,16 +1348,7 @@ button:hover svg {
 }
 
 /* 确保Monaco编辑器在全屏模式下正确显示 */
-.preview-content-fullscreen :deep(.monaco-editor) {
+.fullscreen-text-container :deep(.monaco-editor) {
   height: 100% !important;
-}
-
-/* 暗色主题变量 */
-:root {
-  --bg-color: #ffffff;
-}
-
-.dark {
-  --bg-color: #1f2937;
 }
 </style>
