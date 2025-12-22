@@ -49,6 +49,7 @@
     "libheif-js": "^1.19.8",
     "mime-db": "^1.54.0",
     "mpegts.js": "^1.8.0",
+    "notivue": "^2.4.5",
     "nprogress": "^0.2.0",
     "photoswipe": "^5.4.4",
     "pinia": "^3.0.3",

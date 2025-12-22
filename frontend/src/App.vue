@@ -11,6 +11,8 @@ import FooterMarkdownRenderer from "./modules/admin/components/FooterMarkdownRen
 import { useGlobalMessage } from "@/composables/core/useGlobalMessage.js";
 import { useThemeMode } from "@/composables/core/useThemeMode.js";
 import { IconClose, IconComputerDesktop, IconGithub, IconHamburger, IconMoon, IconSun } from "@/components/icons";
+import { Notivue, NotivueSwipe, Notification, NotificationProgress } from "notivue";
+import { cloudPasteLightTheme, cloudPasteDarkTheme } from "@/styles/notivueTheme";
 
 const route = useRoute();
 
@@ -22,7 +24,7 @@ const siteConfigStore = useSiteConfigStore();
 const { themeMode, isDarkMode, toggleThemeMode } = useThemeMode();
 
 // 全局消息
-const { hasMessage, messageType, messageContent, clearMessage, showMessage } = useGlobalMessage();
+const { clearMessage, showMessage } = useGlobalMessage();
 
 // 计算当前页面 - 基于路由
 const activePage = computed(() => {
@@ -336,45 +338,17 @@ const isDev = import.meta.env.DEV;
     <!-- 全局音乐播放器 -->
     <GlobalMusicPlayer />
 
-    <!-- 全局消息提示 -->
-    <div
-      v-if="hasMessage"
-      class="fixed bottom-4 right-4 z-50 max-w-sm w-full px-4"
-      :role="messageType === 'error' || messageType === 'warning' ? 'alert' : 'status'"
-      :aria-live="messageType === 'error' || messageType === 'warning' ? 'assertive' : 'polite'"
-    >
-      <div
-        :class="[
-          'flex items-start justify-between px-4 py-3 rounded shadow-lg border text-sm',
-          messageType === 'success'
-            ? isDarkMode
-              ? 'bg-green-900 text-green-100 border-green-700'
-              : 'bg-green-50 text-green-800 border-green-200'
-            : messageType === 'error'
-            ? isDarkMode
-              ? 'bg-red-900 text-red-100 border-red-700'
-              : 'bg-red-50 text-red-800 border-red-200'
-            : messageType === 'warning'
-            ? isDarkMode
-              ? 'bg-yellow-900 text-yellow-100 border-yellow-700'
-              : 'bg-yellow-50 text-yellow-800 border-yellow-200'
-            : isDarkMode
-            ? 'bg-gray-800 text-gray-100 border-gray-700'
-            : 'bg-white text-gray-800 border-gray-200',
-        ]"
-      >
-        <div class="pr-3 break-words">
-          {{ messageContent }}
-        </div>
-        <button
-          type="button"
-          class="ml-2 text-xs opacity-70 hover:opacity-100"
-          @click="clearMessage"
+    <!-- 全局消息提示（Notivue） -->
+    <Notivue v-slot="item">
+      <NotivueSwipe :item="item">
+        <Notification
+          :item="item"
+          :theme="isDarkMode ? cloudPasteDarkTheme : cloudPasteLightTheme"
         >
-          ✕
-        </button>
-      </div>
-    </div>
+          <NotificationProgress :item="item" />
+        </Notification>
+      </NotivueSwipe>
+    </Notivue>
   </div>
 </template>
 

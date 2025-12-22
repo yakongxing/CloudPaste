@@ -71,6 +71,10 @@ export default {
         name: "任务管理",
         description: "异步任务执行记录和状态",
       },
+      upload_sessions: {
+        name: "分片上传会话管理",
+        description: "分片上传会话记录和状态"
+      }
     },
 
     // 日志和状态消息

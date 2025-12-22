@@ -71,6 +71,10 @@ export default {
         name: "Task Management",
         description: "Async task execution records and status",
       },
+      upload_sessions: {
+        name: "Multipart Upload Session Management",
+        description: "Multipart upload session records and status",
+      },
     },
 
     // Logs and status messages
