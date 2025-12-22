@@ -4,12 +4,10 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 # 复制依赖（利用 Docker layer cache）
-COPY frontend/package.json frontend/package-lock.json ./
+COPY frontend/package.json frontend/package-lock.json frontend/.npmrc ./
 
 # 安装依赖
-RUN npm ci --cache /tmp/npm-cache
-
-RUN node -v && npm -v
+RUN npm ci --cache /tmp/npm-cache --no-audit --no-fund
 
 # 复制前端源代码
 COPY frontend/ ./
