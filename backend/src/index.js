@@ -129,6 +129,7 @@ app.use("*", async (c, next) => {
       allowHeaders: [
         "Content-Type",
         "Authorization",
+        "Range",
         "X-API-KEY",
         "X-FS-Path-Token",
         "X-FS-Path-Tokens",
@@ -216,16 +217,16 @@ app.onError((err, c) => {
   if (reqId) c.header("X-Request-Id", String(reqId));
   const debugMessage = normalized.expose ? null : sanitizeErrorMessageForClient(normalized.originalError?.message || err);
   return c.json(
-    createErrorResponse(
-      normalized.status,
-      normalized.expose ? normalized.publicMessage : "服务器内部错误",
-      normalized.code,
-      {
-        ...(reqId ? { requestId: String(reqId) } : {}),
-        ...(debugMessage ? { debugMessage } : {}),
-      }
-    ),
-    normalized.status
+      createErrorResponse(
+          normalized.status,
+          normalized.expose ? normalized.publicMessage : "服务器内部错误",
+          normalized.code,
+          {
+            ...(reqId ? { requestId: String(reqId) } : {}),
+            ...(debugMessage ? { debugMessage } : {}),
+          }
+      ),
+      normalized.status
   );
 });
 
@@ -234,8 +235,8 @@ app.notFound((c) => {
   const reqId = c.get("reqId");
   if (reqId) c.header("X-Request-Id", String(reqId));
   return c.json(
-    createErrorResponse(ApiStatus.NOT_FOUND, "未找到请求的资源", "NOT_FOUND"),
-    ApiStatus.NOT_FOUND
+      createErrorResponse(ApiStatus.NOT_FOUND, "未找到请求的资源", "NOT_FOUND"),
+      ApiStatus.NOT_FOUND
   );
 });
 
