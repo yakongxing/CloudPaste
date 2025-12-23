@@ -48,7 +48,7 @@
       <!-- 文件信息和操作界面 -->
       <div v-else class="file-content flex flex-col flex-1">
         <!-- 文件信息 -->
-        <FileViewInfo :fileInfo="fileInfo" class="flex-1 flex flex-col" :darkMode="darkMode" />
+        <FileViewInfo :fileInfo="fileInfo" :darkMode="darkMode" />
 
         <!-- 文件操作按钮 -->
         <FileViewActions :fileInfo="fileInfo" :darkMode="darkMode" @edit="openEditModal" @delete="handleFileDeleted" @refresh-file-info="refreshFileInfo" />
