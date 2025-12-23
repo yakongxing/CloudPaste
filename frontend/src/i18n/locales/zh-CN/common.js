@@ -57,6 +57,9 @@ export default {
       processing: "处理中...",
       requiredField: "此字段为必填项",
       invalidInput: "输入值无效",
+      invalidNameEmpty: "名称不能为空",
+      invalidNameDots: "名称不能是 . 或 ..",
+      invalidNameChars: "名称不能包含 / \\ ? < > * : | \" 这些字符",
       // 通用删除确认对话框
       deleteTitle: "确认删除",
       deleteItem: "确定要删除{name}吗？此操作不可恢复。",

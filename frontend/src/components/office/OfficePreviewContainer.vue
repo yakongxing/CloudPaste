@@ -70,6 +70,8 @@
       <div v-else-if="currentPreviewUrl && currentPreviewUrl !== 'native'" class="office-iframe-wrapper">
         <iframe
           :src="currentPreviewUrl"
+          allow="fullscreen"
+          allowfullscreen
           frameborder="0"
           class="office-iframe"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation"

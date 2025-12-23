@@ -252,6 +252,7 @@
       :description="t('mount.rename.enterNewName')"
       :label="t('mount.rename.newName')"
       :initial-value="newName"
+      :validator="validateFsItemNameDialog"
       :confirm-text="t('mount.rename.confirm')"
       :cancel-text="t('mount.rename.cancel')"
       :loading="renameLoading"
@@ -276,8 +277,11 @@ import { IconChevronDown, IconChevronUp, IconDelete, IconDownload, IconFolderOpe
 import { getFileIcon } from "@/utils/fileTypeIcons.js";
 import { useDirectorySort, useFileOperations } from "@/composables/index.js";
 import InputDialog from "@/components/common/dialogs/InputDialog.vue";
+import { createFsItemNameDialogValidator, validateFsItemName } from "@/utils/fsPathUtils.js";
 
 const { t } = useI18n();
+
+const validateFsItemNameDialog = createFsItemNameDialogValidator(t);
 
 // ===== 虚拟滚动配置 =====
 // 虚拟滚动阈值：超过此数量启用虚拟滚动

@@ -4,6 +4,8 @@
     <div class="iframe-container relative w-full h-full min-h-[300px]">
       <iframe
         :src="currentPreviewUrl"
+        allow="fullscreen"
+        allowfullscreen
         frameborder="0"
         class="w-full h-full"
         @load="handleLoad"

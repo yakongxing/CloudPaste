@@ -45,6 +45,7 @@
 <script setup>
 import { computed } from "vue";
 import { IconHome } from "@/components/icons";
+import { normalizeFsPath } from "@/utils/fsPathUtils.js";
 
 const props = defineProps({
   currentPath: {
@@ -68,16 +69,8 @@ const props = defineProps({
 
 const emit = defineEmits(["navigate", "prefetch"]);
 
-const normalizePath = (path) => {
-  const raw = typeof path === "string" && path ? path : "/";
-  const withLeading = raw.startsWith("/") ? raw : `/${raw}`;
-  const collapsed = withLeading.replace(/\/{2,}/g, "/");
-  if (collapsed === "/") return "/";
-  return collapsed.replace(/\/+$/, "");
-};
-
-const normalizedBasicPath = computed(() => normalizePath(props.basicPath));
-const normalizedCurrentPath = computed(() => normalizePath(props.currentPath));
+const normalizedBasicPath = computed(() => normalizeFsPath(props.basicPath));
+const normalizedCurrentPath = computed(() => normalizeFsPath(props.currentPath));
 
 const isApiKeyUser = computed(() => props.userType === "user" && normalizedBasicPath.value !== "/");
 

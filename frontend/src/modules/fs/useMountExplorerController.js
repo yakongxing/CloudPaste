@@ -4,6 +4,7 @@ import { useAuthStore } from "@/stores/authStore.js";
 import { useFsService } from "@/modules/fs";
 import { useViewStateMachine } from "./composables/useViewStateMachine";
 import { ViewState } from "./constants/ViewState";
+import { normalizeFsPath, toDirApiPath } from "@/utils/fsPathUtils.js";
 
 const HISTORY_LIMIT = 20;
 /** @type {Map<string, any>} */
@@ -44,14 +45,6 @@ const safeClone = (value) => {
   }
 };
 
-const normalizeFsPath = (path) => {
-  const raw = typeof path === "string" && path ? path : "/";
-  const withLeading = raw.startsWith("/") ? raw : `/${raw}`;
-  const collapsed = withLeading.replace(/\/{2,}/g, "/");
-  if (collapsed === "/") return "/";
-  return collapsed.replace(/\/+$/, "");
-};
-
 const encodeFsSegment = (segment) => encodeURIComponent(segment);
 
 const decodeFsSegment = (segment) => {
@@ -84,13 +77,6 @@ const setPathAs = (path, dir = true) => {
   } else {
     isDirRecord.delete(normalized);
   }
-};
-
-// 后端 FS 目录类接口仍沿用“目录路径以 / 结尾”的契约（仅用于 API 调用与目录上下文）
-const toDirApiPath = (path) => {
-  const normalized = normalizeFsPath(path);
-  if (normalized === "/") return "/";
-  return `${normalized}/`;
 };
 
 const getParentDirPath = (filePath) => {

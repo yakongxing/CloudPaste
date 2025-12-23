@@ -4,15 +4,7 @@
  */
 
 import { ref, reactive } from "vue";
-
-// 路径规范化：与后端 FsMetaService 保持一致的规则
-const normalizePath = (path) => {
-  if (!path || path === "/") {
-    return "/";
-  }
-  const trimmed = path.replace(/\/+$/, "") || "/";
-  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-};
+import { normalizeFsPath } from "@/utils/fsPathUtils.js";
 
 const STORAGE_KEY = "fs_path_tokens_v1";
 
@@ -28,7 +20,7 @@ const loadTokensFromStorage = () => {
     if (!data || typeof data !== "object") return;
     Object.entries(data).forEach(([path, token]) => {
       if (typeof path === "string" && typeof token === "string" && token) {
-        const normalized = normalizePath(path);
+        const normalized = normalizeFsPath(path);
         pathTokens.set(normalized, token);
       }
     });
@@ -68,7 +60,7 @@ export function usePathPassword() {
    * @returns {boolean}
    */
   const hasPathToken = (path) => {
-    const normalized = normalizePath(path);
+    const normalized = normalizeFsPath(path);
     // 从当前路径向上查找最近的有 token 的 ownerPath
     let current = normalized;
     while (true) {
@@ -95,7 +87,7 @@ export function usePathPassword() {
    * @returns {string|null}
    */
   const getPathToken = (path) => {
-    const normalized = normalizePath(path);
+    const normalized = normalizeFsPath(path);
     // 优先使用距离当前路径最近的密码域 token
     let current = normalized;
     while (true) {
@@ -137,7 +129,7 @@ export function usePathPassword() {
    * @param {string} token - 验证token
    */
   const savePathToken = (path, token) => {
-    const normalized = normalizePath(path);
+    const normalized = normalizeFsPath(path);
     pathTokens.set(normalized, token);
     console.log("保存路径密码token:", { path: normalized, token });
     persistTokensToStorage();
@@ -148,7 +140,7 @@ export function usePathPassword() {
    * @param {string} path - 路径
    */
   const removePathToken = (path) => {
-    pathTokens.delete(normalizePath(path));
+    pathTokens.delete(normalizeFsPath(path));
     persistTokensToStorage();
   };
 
@@ -165,7 +157,7 @@ export function usePathPassword() {
    * @param {string} path - 路径
    */
   const setPendingPath = (path) => {
-    pendingPath.value = normalizePath(path);
+    pendingPath.value = normalizeFsPath(path);
   };
 
   /**
