@@ -11,7 +11,7 @@ import FooterMarkdownRenderer from "./modules/admin/components/FooterMarkdownRen
 import { useGlobalMessage } from "@/composables/core/useGlobalMessage.js";
 import { useThemeMode } from "@/composables/core/useThemeMode.js";
 import { IconClose, IconComputerDesktop, IconGithub, IconHamburger, IconMoon, IconSun } from "@/components/icons";
-import { Notivue, NotivueSwipe, Notification, NotificationProgress } from "notivue";
+import { Notivue, NotivueSwipe, Notification } from "notivue";
 import { cloudPasteLightTheme, cloudPasteDarkTheme } from "@/styles/notivueTheme";
 
 const route = useRoute();
@@ -344,9 +344,7 @@ const isDev = import.meta.env.DEV;
         <Notification
           :item="item"
           :theme="isDarkMode ? cloudPasteDarkTheme : cloudPasteLightTheme"
-        >
-          <NotificationProgress :item="item" />
-        </Notification>
+        />
       </NotivueSwipe>
     </Notivue>
   </div>
