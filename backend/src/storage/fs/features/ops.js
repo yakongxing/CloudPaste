@@ -360,7 +360,6 @@ async function copyBetweenDrivers(fs, sourceCtx, targetCtx, sourcePath, targetPa
       source: sourcePath,
       target: targetPath,
       uploadResult,
-      // 新增: 返回文件大小信息供任务统计使用
       contentLength: contentLength || 0,
     };
   } catch (error) {

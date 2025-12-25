@@ -225,10 +225,6 @@ export const registerMultipartRoutes = (router, helpers) => {
       throw new ValidationError("未找到对应的上传会话");
     }
 
-    if (sessionRow.storage_type !== "GOOGLE_DRIVE") {
-      throw new ValidationError("当前上传会话的存储类型不支持通过该端点上传分片");
-    }
-
     const mountManager = new MountManager(db, encryptionSecret, repositoryFactory, { env: c.env });
     const fileSystem = new FileSystem(mountManager);
 
@@ -238,12 +234,17 @@ export const registerMultipartRoutes = (router, helpers) => {
       userType,
     );
 
-    if (driver.getType() !== "GOOGLE_DRIVE") {
-      throw new ValidationError("上传会话对应的驱动不是 Google Drive");
+    if (String(driver.getType()) !== String(sessionRow.storage_type)) {
+      throw new ValidationError("上传会话对应的驱动类型与会话记录不一致");
     }
 
-    // 委托给 GoogleDriveStorageDriver 进行分片转发
-    // 仅 GoogleDriveStorageDriver 实现该方法，其他驱动不会触发此逻辑
+    if (typeof driver.proxyFrontendMultipartChunk !== "function") {
+      throw new ValidationError("当前上传会话的存储类型不支持通过该端点上传分片");
+    }
+
+    // 委托给 driver 自己实现“分片中转”
+    // - GoogleDrive：后端转发到 Google Drive resumable session
+    // - Telegram：后端上传该分片到 Telegram，并写入 upload_parts
     // @ts-ignore
     const result = await driver.proxyFrontendMultipartChunk(sessionRow, /** @type {any} */ (body), {
       contentRange,
@@ -260,6 +261,7 @@ export const registerMultipartRoutes = (router, helpers) => {
         success: true,
         done: result?.done === true,
         status: result?.status ?? 200,
+        skipped: result?.skipped === true,
       },
       "分片上传成功",
     );

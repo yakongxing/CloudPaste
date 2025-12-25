@@ -42,7 +42,7 @@ export class StorageStreaming {
    * @returns {Promise<RangeReader>}
    */
   async getRangeReader(options) {
-    const { path, channel, mount, storageConfigId, rangeHeader, request, userIdOrInfo, userType, db } = options;
+    const { path, channel, mount, storageConfigId, rangeHeader, request, userIdOrInfo, userType, ownerType, ownerId, db } = options;
 
     const logPrefix = `[StorageStreaming][${channel}]`;
     console.log(`${logPrefix} 开始处理: ${path}`);
@@ -59,6 +59,8 @@ export class StorageStreaming {
         request,
         userIdOrInfo,
         userType,
+        ownerType,
+        ownerId,
       });
 
       // 验证返回结构

@@ -11,6 +11,7 @@ import { createDirectLink, createProxyLink } from "./LinkTypes.js";
 import { findMountPointByPathForProxy } from "../fs/utils/MountResolver.js";
 import { ProxySignatureService } from "../../services/ProxySignatureService.js";
 import { WORKER_ENTRY, buildSignedProxyUrl, buildSignedWorkerUrl } from "../../constants/proxy.js";
+import { UserType } from "../../constants/index.js";
 
 /**
  * 将文件名转为 URL path segment 安全的形式（用于 /api/s/:slug/:filename）。
@@ -393,7 +394,7 @@ export class LinkService {
     const linkResult = await fileSystem.generateFileLink(path, userIdOrInfo, userType, {
       ...options,
       userType,
-      userId: userType === "ADMIN" ? userIdOrInfo : userIdOrInfo?.id,
+      userId: userType === UserType.ADMIN ? userIdOrInfo : userIdOrInfo?.id,
       // client 模式下：配置了 url_proxy 时强制走代理路径（FsLinkStrategy 内部只会走 generateProxyUrl）
       // proxy 模式下：不受 url_proxy 影响，仅根据挂载策略与驱动能力决定是否代理
       forceProxy: options.forceProxy || (mode === "client" && hasUrlProxy),
@@ -453,8 +454,36 @@ export class LinkService {
     if (hasUrlProxy) {
       try {
         const entryPath = `${WORKER_ENTRY.FS_PREFIX}${path}${options.forceDownload ? "?download=true" : ""}`;
+
+        // - /proxy/fs 对外入口：sign 只覆盖 fsPath + expire（不包含 owner）
+        // - Telegram 需要的 owner 上下文：由外部代理用 TOKEN 调 /api/proxy/link 后在“上游 URL”里解决，
+        //   浏览器永远不需要知道 ot/oid。
+
+        let workerSignature = null;
+        try {
+          const proxyMountResult =
+            mountResult && !mountResult.error ? mountResult : await findMountPointByPathForProxy(this.db, path, this.repositoryFactory);
+          if (!proxyMountResult.error) {
+            const signatureService = new ProxySignatureService(this.db, this.encryptionSecret, this.repositoryFactory);
+            const signatureNeed = await signatureService.needsSignature(proxyMountResult.mount);
+            const forceWorkerSignature =
+              proxyMountResult?.mount?.storage_type === StorageFactory.SUPPORTED_TYPES.TELEGRAM;
+            if (signatureNeed.required || forceWorkerSignature) {
+              const signInfo = await signatureService.generateStorageSignature(path, proxyMountResult.mount, {
+                expiresIn: options.expiresIn,
+                // 不传 ownerType/ownerId：保持外部代理兼容的签名格式（path:expire）
+              });
+              workerSignature = signInfo.signature;
+            }
+          }
+        } catch (e) {
+          console.warn("生成 FS Worker 入口签名失败，将返回未签名的入口链接：", e?.message || e);
+          workerSignature = null;
+        }
+
+        // 外部入口：不携带 ot/oid，避免外部代理与缓存体系被迫升级
         proxiedUrl = buildSignedWorkerUrl(urlProxy, entryPath, {
-          signature: signatureForPath || undefined,
+          signature: workerSignature || undefined,
         });
         console.log(
           `[LinkService][fs][url_proxy] 路径(${path}) 使用 url_proxy=${urlProxy} 生成 Worker 入口: ${proxiedUrl}`,

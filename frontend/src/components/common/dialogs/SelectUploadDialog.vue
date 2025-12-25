@@ -61,10 +61,25 @@
                       <span v-if="showMatchScore" class="text-gray-300 dark:text-gray-600">•</span>
 
                       <!-- 已上传分片数量 -->
-                      <span class="inline-flex items-center gap-1">
+                      <span class="inline-flex items-center gap-1 flex-wrap">
                         <IconDocument size="sm" class="flex-shrink-0" />
-                        {{ getUploadedPartsDisplay(upload) }}
+                        <span>{{ getUploadedPartsInfo(upload).partsText }}</span>
+                        <span
+                          v-if="getUploadedPartsInfo(upload).progressText"
+                          class="text-xs"
+                          :class="darkMode ? 'text-gray-500' : 'text-gray-400'"
+                        >
+                          · {{ getUploadedPartsInfo(upload).progressText }}
+                        </span>
                       </span>
+
+                      <!-- 失败分片提示（如果有） -->
+                      <template v-if="getPartErrorsCount(upload) > 0">
+                        <span class="text-gray-300 dark:text-gray-600">•</span>
+                        <span class="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
+                          {{ t("common.dialogs.selectUpload.partErrors", { count: getPartErrorsCount(upload) }) }}
+                        </span>
+                      </template>
 
                       <!-- 分隔符和上传ID -->
                       <template v-if="upload.uploadId">
@@ -188,16 +203,33 @@ const getMatchScoreDisplay = (upload, index) => {
   return Math.max(baseScore, 60).toFixed(1);
 };
 
-// 获取已上传分片数量的精确显示
-const getUploadedPartsDisplay = (upload) => {
+// 获取已上传分片数量的精确显示（分离主信息 + 小字进度）
+const getUploadedPartsInfo = (upload) => {
+  const buildProgressText = () => {
+    if (typeof upload?.bytesUploaded !== "number" || !Number.isFinite(upload.bytesUploaded) || upload.bytesUploaded < 0) return "";
+    if (!upload?.fileSize) return "";
+
+    const totalBytes = Number(upload.fileSize) || 0;
+    const uploadedBytes = Math.min(Number(upload.bytesUploaded) || 0, totalBytes);
+    const uploadedMB = (uploadedBytes / (1024 * 1024)).toFixed(1);
+    const totalMB = (totalBytes / (1024 * 1024)).toFixed(1);
+    const percentage = totalBytes > 0 ? ((uploadedBytes / totalBytes) * 100).toFixed(1) : "0.0";
+    return t("common.dialogs.selectUpload.progressInfo", { percentage, uploaded: uploadedMB, total: totalMB });
+  };
+
+  const progressText = buildProgressText();
+
   // 1. 优先使用服务器返回的分片信息（最准确）
   if (upload.uploadedParts && Array.isArray(upload.uploadedParts)) {
     const partCount = upload.uploadedParts.length;
     if (partCount > 0) {
-      // 计算总分片数（假设5MB分片大小）
-      const partSize = 5 * 1024 * 1024; // 5MB
+      // 计算总分片数（优先使用服务端返回的 partSize）
+      const partSize = Number(upload.partSize) > 0 ? Number(upload.partSize) : 5 * 1024 * 1024;
       const totalParts = upload.fileSize ? Math.ceil(upload.fileSize / partSize) : "?";
-      return t("common.dialogs.selectUpload.partsInfo", { count: partCount, total: totalParts });
+      return {
+        partsText: t("common.dialogs.selectUpload.partsInfo", { count: partCount, total: totalParts }),
+        progressText,
+      };
     }
   }
 
@@ -205,10 +237,21 @@ const getUploadedPartsDisplay = (upload) => {
   if (upload.parts && Array.isArray(upload.parts)) {
     const partCount = upload.parts.length;
     if (partCount > 0) {
-      const partSize = 5 * 1024 * 1024;
+      const partSize = Number(upload.partSize) > 0 ? Number(upload.partSize) : 5 * 1024 * 1024;
       const totalParts = upload.fileSize ? Math.ceil(upload.fileSize / partSize) : "?";
-      return t("common.dialogs.selectUpload.partsInfo", { count: partCount, total: totalParts });
+      return {
+        partsText: t("common.dialogs.selectUpload.partsInfo", { count: partCount, total: totalParts }),
+        progressText,
+      };
     }
+  }
+
+  // 如果没有分片列表，但后端返回了 bytesUploaded，也给个进度提示
+  if (progressText) {
+    return {
+      partsText: t("common.dialogs.selectUpload.partialComplete"),
+      progressText,
+    };
   }
 
   // 3. 使用进度信息计算
@@ -216,16 +259,31 @@ const getUploadedPartsDisplay = (upload) => {
     const percentage = ((upload.progress.uploadedBytes / upload.progress.totalBytes) * 100).toFixed(1);
     const uploadedMB = (upload.progress.uploadedBytes / (1024 * 1024)).toFixed(1);
     const totalMB = (upload.progress.totalBytes / (1024 * 1024)).toFixed(1);
-    return t("common.dialogs.selectUpload.progressInfo", { percentage, uploaded: uploadedMB, total: totalMB });
+    return {
+      partsText: t("common.dialogs.selectUpload.partialComplete"),
+      progressText: t("common.dialogs.selectUpload.progressInfo", { percentage, uploaded: uploadedMB, total: totalMB }),
+    };
   }
 
   // 4. 使用单个分片编号（不太准确，但总比没有好）
   if (upload.partNumber && typeof upload.partNumber === "number") {
-    return t("common.dialogs.selectUpload.atLeastParts", { count: upload.partNumber });
+    return {
+      partsText: t("common.dialogs.selectUpload.atLeastParts", { count: upload.partNumber }),
+      progressText: "",
+    };
   }
 
   // 5. 默认显示（最不准确）
-  return t("common.dialogs.selectUpload.partialComplete");
+  return {
+    partsText: t("common.dialogs.selectUpload.partialComplete"),
+    progressText: "",
+  };
+};
+
+const getPartErrorsCount = (upload) => {
+  const errors = upload?.partErrors;
+  if (!Array.isArray(errors)) return 0;
+  return errors.length;
 };
 
 // 格式化上传ID显示

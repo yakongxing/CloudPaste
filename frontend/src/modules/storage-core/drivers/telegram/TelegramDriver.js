@@ -6,18 +6,33 @@ import { getFullApiUrl } from "@/api/config.js";
 import { buildAuthHeadersForRequest } from "@/modules/security/index.js";
 import { api } from "@/api";
 
+const MB = 1024 * 1024;
+const DEFAULT_TG_PART_SIZE_BYTES = 15 * MB;
+const DEFAULT_TG_UPLOAD_CONCURRENCY = 2;
+
+function toPositiveInt(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.floor(n);
+}
+
+function clampInt(value, { min, max, fallback }) {
+  const n = toPositiveInt(value, fallback);
+  return Math.min(max, Math.max(min, n));
+}
+
 /**
- * GoogleDriveDriver（前端）
+ * TelegramDriver
  *
- * 设计目标：
- * - 与 OneDrive/Local/WebDAV 一样，前端统一通过后端 FS/Share API 进行上传，不直接暴露 Google Drive 会话 URL 或 Token
- * - 能力矩阵：
- *   - share: backendStream/backendForm 均可用，不支持 presigned/url
- *   - fs: backendStream/backendForm 可用，presignedSingle/multipart 暂不开放（后端先实现中转上传）
+ * - Telegram 仅当“内容后端”，目录树真相在 vfs_nodes
+ * - Share 上传：只走后端 /share/upload（流式 / 表单），由后端负责 20MB 上限校验
+ * - FS 挂载上传：支持 /fs/upload（≤20MB）与 /fs/multipart/*（断点续传/大文件）
+ *
  */
-export class GoogleDriveDriver {
+export class TelegramDriver {
   constructor(config = {}) {
     this.config = config;
+
     this.capabilities = createCapabilities({
       share: {
         backendStream: true,
@@ -36,14 +51,13 @@ export class GoogleDriveDriver {
     this.share = {
       applyShareUploader: this.applyShareUploader.bind(this),
       applyUrlUploader: () => {
-        throw new Error("GoogleDrive 暂不支持外链拉取上传");
+        throw new Error("Telegram 暂不支持外链拉取上传");
       },
       applyDirectShareUploader: this.applyShareUploader.bind(this),
     };
 
     this.fs = {
       applyFsUploader: this.applyFsUploader.bind(this),
-      // 供 ServerResumePlugin 使用的辅助方法
       async listUploads({ path } = {}) {
         return api.fs.listMultipartUploads(path || "");
       },
@@ -57,7 +71,7 @@ export class GoogleDriveDriver {
     return this.config?.id ?? null;
   }
 
-  // Share 上传：与 Local/WebDAV 对齐，统一走 /share/upload
+  // Share 上传：与 Local/WebDAV/GoogleDrive 对齐，统一走 /share/upload
   applyShareUploader(uppy, { payload, onShareRecord, shareMode } = {}) {
     if (!uppy) {
       throw new Error("applyShareUploader 需要提供 Uppy 实例");
@@ -65,7 +79,7 @@ export class GoogleDriveDriver {
 
     const storageConfigId = payload?.storage_config_id || this.storageConfigId;
     if (!storageConfigId) {
-      throw new Error("缺少 storage_config_id，无法初始化 GoogleDrive 分享上传");
+      throw new Error("缺少 storage_config_id，无法初始化 Telegram 分享上传");
     }
 
     const baseMeta = {
@@ -89,7 +103,7 @@ export class GoogleDriveDriver {
 
     if (mode === "stream") {
       uppy.use(XHRUpload, {
-        id: "GoogleDriveShareUploadStream",
+        id: "TelegramShareUploadStream",
         endpoint: getFullApiUrl("/share/upload"),
         method: "PUT",
         formData: false,
@@ -125,7 +139,7 @@ export class GoogleDriveDriver {
       });
     } else {
       uppy.use(XHRUpload, {
-        id: "GoogleDriveShareUpload",
+        id: "TelegramShareUploadForm",
         endpoint: getFullApiUrl("/share/upload"),
         method: "POST",
         formData: true,
@@ -178,50 +192,100 @@ export class GoogleDriveDriver {
     return STORAGE_STRATEGIES.BACKEND_STREAM;
   }
 
-  // FS 上传：统一通过 /fs/upload 后端中转（流式/表单）
   applyFsUploader(uppy, { strategy, path } = {}) {
     if (!uppy) {
       throw new Error("applyFsUploader 需要提供 Uppy 实例");
     }
 
-    // 预签名直传（多分片模式）：复用 StorageAdapter + AwsS3，与 S3/OneDrive 对齐
-    if (
-      strategy === STORAGE_STRATEGIES.PRESIGNED_SINGLE ||
-      strategy === STORAGE_STRATEGIES.PRESIGNED_MULTIPART
-    ) {
-      const adapter = new StorageAdapter(path || "/", uppy);
+    if (strategy === STORAGE_STRATEGIES.PRESIGNED_MULTIPART) {
+      // 最小 5MB”限制，
+      const partSizeMb = clampInt(this.config?.part_size_mb, {
+        min: 5,
+        max: 100,
+        fallback: DEFAULT_TG_PART_SIZE_BYTES / MB,
+      });
+      const partSize = partSizeMb * MB;
+      const uploadConcurrency = clampInt(this.config?.upload_concurrency, {
+        min: 1,
+        max: 8,
+        fallback: DEFAULT_TG_UPLOAD_CONCURRENCY,
+      });
 
-      const isMultipart = strategy === STORAGE_STRATEGIES.PRESIGNED_MULTIPART;
-      const awsS3Opts = {
-        id: "GoogleDriveFsPresigned",
-        // Google Drive single_session 模式要求严格顺序，这里限制为串行上传
-        limit: 1,
-        shouldUseMultipart: () => isMultipart,
-      };
+      const adapter = new StorageAdapter(path || "/", uppy, { partSize });
 
-      if (isMultipart) {
-        awsS3Opts.getUploadParameters = adapter.getUploadParameters.bind(adapter);
-        awsS3Opts.createMultipartUpload = adapter.createMultipartUpload.bind(adapter);
-        awsS3Opts.signPart = adapter.signPart.bind(adapter);
-        awsS3Opts.uploadPartBytes = adapter.uploadPartBytes.bind(adapter);
-        awsS3Opts.completeMultipartUpload = adapter.completeMultipartUpload.bind(adapter);
-        awsS3Opts.abortMultipartUpload = adapter.abortMultipartUpload.bind(adapter);
-        awsS3Opts.listParts = adapter.listParts.bind(adapter);
-      } else {
-        awsS3Opts.getUploadParameters = adapter.getUploadParameters.bind(adapter);
-        awsS3Opts.uploadPartBytes = adapter.uploadSingleFile.bind(adapter);
+      // 续传时必须优先用 existingUpload.partSize（服务器会话的 partSize）。
+      // 做一个 Blob->fileId 的映射。
+      const BLOB_MAP_KEY = "__cloudpaste_blob_to_file_id_map";
+      const BLOB_MAP_BOUND_KEY = "__cloudpaste_blob_to_file_id_bound";
+
+      if (!uppy[BLOB_MAP_KEY]) {
+        uppy[BLOB_MAP_KEY] = new WeakMap();
+      }
+      if (!uppy[BLOB_MAP_BOUND_KEY]) {
+        uppy[BLOB_MAP_BOUND_KEY] = true;
+        uppy.on("file-added", (file) => {
+          try {
+            if (file?.data && typeof file.data === "object") {
+              uppy[BLOB_MAP_KEY].set(file.data, file.id);
+            }
+          } catch {}
+        });
+        uppy.on("file-removed", (file) => {
+          try {
+            if (file?.data && typeof file.data === "object") {
+              uppy[BLOB_MAP_KEY].delete(file.data);
+            }
+          } catch {}
+        });
       }
 
-      uppy.use(AwsS3, awsS3Opts);
-      return {
-        adapter,
-        mode: isMultipart
-          ? STORAGE_STRATEGIES.PRESIGNED_MULTIPART
-          : STORAGE_STRATEGIES.PRESIGNED_SINGLE,
+      const resolveResumePartSize = (blob) => {
+        try {
+          if (!blob || typeof blob !== "object") return null;
+          const fileId = uppy[BLOB_MAP_KEY].get(blob);
+          if (!fileId) return null;
+          const uppyFile = uppy.getFile?.(fileId);
+          const fromResume = uppyFile?.meta?.existingUpload?.partSize;
+          const n = Number(fromResume);
+          if (!Number.isFinite(n) || n <= 0) return null;
+          return Math.floor(n);
+        } catch {
+          return null;
+        }
       };
+
+      const awsS3Options = {
+        id: "TelegramFsMultipart",
+        limit: uploadConcurrency,
+        shouldUseMultipart: () => true,
+        getChunkSize: (blob) => resolveResumePartSize(blob) || partSize,
+        createMultipartUpload: adapter.createMultipartUpload.bind(adapter),
+        signPart: adapter.signPart.bind(adapter),
+        uploadPartBytes: adapter.uploadPartBytes.bind(adapter),
+        completeMultipartUpload: adapter.completeMultipartUpload.bind(adapter),
+        abortMultipartUpload: adapter.abortMultipartUpload.bind(adapter),
+        listParts: adapter.listParts.bind(adapter),
+      };
+
+      const existing = uppy.getPlugin?.("TelegramFsMultipart");
+      if (existing && typeof existing.setOptions === "function") {
+        existing.setOptions(awsS3Options);
+      } else {
+        try {
+          if (existing) uppy.removePlugin(existing);
+        } catch {}
+        uppy.use(AwsS3, awsS3Options);
+      }
+
+      return { adapter, mode: STORAGE_STRATEGIES.PRESIGNED_MULTIPART };
     }
 
-    // 后端中转上传：沿用原有 /fs/upload 流式/表单逻辑
+    // Telegram 不支持 presigned-single；如果误选，回退到后端流式
+    if (strategy === STORAGE_STRATEGIES.PRESIGNED_SINGLE) {
+      strategy = STORAGE_STRATEGIES.BACKEND_STREAM;
+    }
+
+    // 后端中转上传：/fs/upload（≤20MB，超出由后端拒绝）
     const headersBase = buildAuthHeadersForRequest({});
     try {
       uppy.setMeta({ path: path || "/", use_multipart: "false" });
@@ -229,7 +293,7 @@ export class GoogleDriveDriver {
 
     if (strategy === STORAGE_STRATEGIES.BACKEND_FORM) {
       uppy.use(XHRUpload, {
-        id: "GoogleDriveBackendForm",
+        id: "TelegramBackendForm",
         endpoint: getFullApiUrl("/fs/upload"),
         method: "POST",
         formData: true,
@@ -240,7 +304,7 @@ export class GoogleDriveDriver {
       });
     } else {
       uppy.use(XHRUpload, {
-        id: "GoogleDriveBackendStream",
+        id: "TelegramBackendStream",
         endpoint: (file) => {
           const meta = file.meta || {};
           const basePath = meta.path || path || "/";
@@ -281,9 +345,6 @@ export class GoogleDriveDriver {
       });
     });
 
-    return {
-      adapter: null,
-      mode: strategy,
-    };
+    return { adapter: null, mode: strategy || null };
   }
 }

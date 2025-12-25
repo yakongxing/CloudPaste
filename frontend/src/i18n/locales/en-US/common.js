@@ -80,6 +80,7 @@ export default {
         recommended: "Recommended",
         matchScore: "Match {score}%",
         partsInfo: "{count}/{total} parts",
+        partErrors: "{count} failed",
         partialComplete: "Partially complete",
         atLeastParts: "At least {count} parts",
         progressInfo: "{percentage}% ({uploaded}/{total}MB)",

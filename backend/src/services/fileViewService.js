@@ -10,7 +10,7 @@ import { getFileBySlug, isFileAccessible } from "./fileService.js";
 import { ObjectStore } from "../storage/object/ObjectStore.js";
 import { StorageStreaming, STREAMING_CHANNELS } from "../storage/streaming/index.js";
 import { StorageFactory } from "../storage/factory/StorageFactory.js";
-import { FILE_TYPES } from "../constants/index.js";
+import { FILE_TYPES, UserType } from "../constants/index.js";
 
 /**
  * 文件查看服务类
@@ -36,13 +36,19 @@ export class FileViewService {
       console.log(`开始删除过期文件: ${file.id}`);
 
       // 通过 ObjectStore 按存储路径删除对象
-      if (file.storage_path && file.storage_config_id && file.storage_type) {
+      //
+      // 1) “上传即分享”（share upload / storage-first）：file_path 通常为空，这类过期应删除真实存储对象
+      // 2) “从文件系统创建分享”（fs -> share）：file_path 有值，表示引用的是网盘里的真实文件
+      //    这种场景下“分享过期”只应该删除分享记录，不应该删除真实网盘文件。
+      const shouldDeleteStorageObject = !file.file_path;
+
+      if (shouldDeleteStorageObject && file.storage_path && file.storage_config_id && file.storage_type) {
         try {
           const objectStore = new ObjectStore(this.db, this.encryptionSecret, this.repositoryFactory);
           await objectStore.deleteByStoragePath(file.storage_config_id, file.storage_path, { db: this.db });
           console.log(`已从存储删除文件: ${file.storage_path}`);
         } catch (e) {
-          console.warn("删除存储对象失败（已忽略以完成记录删除）:", e?.message || e);
+        console.warn("删除存储对象失败（已忽略以完成记录删除）:", e?.message || e);
         }
       }
 
@@ -139,6 +145,20 @@ export class FileViewService {
       // 抽取本地代理下载逻辑，便于在直链失败时复用
       // 使用 StorageStreaming 层统一处理
       const proxyDownload = async () => {
+        const parseOwnerFromCreatedBy = (createdBy) => {
+          const raw = typeof createdBy === "string" ? createdBy.trim() : "";
+          if (!raw || raw === "anonymous") return null;
+          if (raw.startsWith("apikey:")) {
+            const id = raw.slice("apikey:".length).trim();
+            if (!id) return null;
+            return { ownerType: UserType.API_KEY, ownerId: id };
+          }
+          // 默认视为 admin 创建的分享
+          return { ownerType: UserType.ADMIN, ownerId: raw };
+        };
+
+        const owner = parseOwnerFromCreatedBy(fileRecord.created_by);
+
         // 处理 Range 请求
         const rangeHeader = request.headers.get("Range");
         if (rangeHeader) {
@@ -160,6 +180,7 @@ export class FileViewService {
           request,
           db: this.db,
           repositoryFactory: this.repositoryFactory,
+          ...(owner ? owner : null),
         });
 
         // 基于文件记录重新计算 Content-Type / Content-Disposition，保持分享层一致性

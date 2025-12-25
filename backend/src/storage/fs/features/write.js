@@ -77,6 +77,8 @@ export async function createDirectory(fs, path, userIdOrInfo, userType) {
     mount,
     subPath,
     db: fs.mountManager.db,
+    userIdOrInfo,
+    userType,
   });
 
   fs.emitCacheInvalidation({ mount, paths: [dirPath], reason: "mkdir" });

@@ -210,11 +210,12 @@ export function buildSignedWorkerUrl(baseOrigin, entryPath, options = {}) {
 
   // 未配置 baseOrigin 时，回退为相对路径 + 可选签名参数
   if (!baseOrigin) {
-    if (!signature) {
-      return entryPath;
-    }
     const hasQuery = entryPath.includes("?");
-    return `${entryPath}${hasQuery ? "&" : "?"}${PROXY_CONFIG.SIGN_PARAM}=${encodeURIComponent(signature)}`;
+    let result = entryPath;
+    if (signature) {
+      result += `${hasQuery ? "&" : "?"}${PROXY_CONFIG.SIGN_PARAM}=${encodeURIComponent(signature)}`;
+    }
+    return result;
   }
 
   try {
