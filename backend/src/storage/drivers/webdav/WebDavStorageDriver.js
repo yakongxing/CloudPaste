@@ -294,6 +294,10 @@ export class WebDavStorageDriver extends BaseDriver {
     const statusFromError = this._statusFromError.bind(this);
     // 仅对 Range 请求显式关闭缓存
     const workerNoCacheOptionsForRange = typeof caches !== "undefined" ? { cf: { cacheEverything: false } } : {};
+    let debugLabel = "WEBDAV";
+    try {
+      debugLabel = `WEBDAV:${new URL(fileUrl).host}`;
+    } catch {}
 
     return createHttpStreamDescriptor({
       size,
@@ -301,6 +305,7 @@ export class WebDavStorageDriver extends BaseDriver {
       etag,
       lastModified,
       supportsRange: true,
+      debugLabel,
       async fetchResponse(signal) {
         const resp = await fetch(fileUrl, {
           headers: { Authorization: authHeader },

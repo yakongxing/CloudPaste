@@ -91,18 +91,20 @@ export function createNodeStreamDescriptor({ openStream, openRangeStream, size, 
  * @param {string|null} [params.etag]
  * @param {Date|null} [params.lastModified]
  * @param {boolean} [params.supportsRange] - 若已知服务器支持 Range，可显式传入
+ * @param {string|null} [params.debugLabel] - 仅用于日志标识（不要放敏感信息）
  * @returns {import("./types.js").StorageStreamDescriptor & { supportsRange?: boolean }}
  */
 export function createHttpStreamDescriptor({
-  fetchResponse,
-  fetchRangeResponse,
-  fetchHeadResponse,
-  size = null,
-  contentType = null,
-  etag = null,
-  lastModified = null,
-  supportsRange,
-}) {
+                                             fetchResponse,
+                                             fetchRangeResponse,
+                                             fetchHeadResponse,
+                                             size = null,
+                                             contentType = null,
+                                             etag = null,
+                                             lastModified = null,
+                                             supportsRange,
+                                             debugLabel = null,
+                                           }) {
   let currentSize = typeof size === "number" ? size : null;
 
   const RETRYABLE_HTTP_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -171,6 +173,33 @@ export function createHttpStreamDescriptor({
       if (Number.isFinite(parsed) && parsed >= 0) return parsed;
     }
     return null;
+  };
+
+  const pickDebugHeaders = (headers) => {
+    if (!headers || typeof headers.get !== "function") return {};
+    const allow = [
+      "content-range",
+      "accept-ranges",
+      "content-length",
+      "content-type",
+      "content-encoding",
+      "cache-control",
+      "pragma",
+      "etag",
+      "last-modified",
+      "vary",
+      "age",
+      "cf-cache-status",
+      "server",
+      "date",
+    ];
+    /** @type {Record<string, string>} */
+    const out = {};
+    for (const key of allow) {
+      const val = headers.get(key);
+      if (val) out[key] = String(val);
+    }
+    return out;
   };
 
   const descriptor = {
@@ -253,7 +282,7 @@ export function createHttpStreamDescriptor({
     descriptor.getRange = async (range, options = {}) => {
       const { signal } = options;
       const rangeHeader = `bytes=${range.start}-${range.end}`;
-      const resp = await fetchWithRetry("GET(Range)", () => fetchRangeResponse(signal, rangeHeader, range), { signal });
+      let resp = await fetchWithRetry("GET(Range)", () => fetchRangeResponse(signal, rangeHeader, range), { signal });
 
       if (!resp.ok) {
         if (resp.status === 404) {
@@ -267,12 +296,47 @@ export function createHttpStreamDescriptor({
         if (typeof inferred === "number") currentSize = inferred;
       }
 
-      const stream = resp.body;
+      // 注意：下方可能会因为“Range 被忽略”触发重试，因此不要过早固定 stream 引用。
       // 判断上游是否“真的”按 Range 返回了部分内容：
       // - 标准：206 + Content-Range
       // - 兼容：部分上游会返回 200 但带 Content-Range（OpenList 也为此做了兼容检查）
       //   参考：D:/github-project/OpenList/internal/stream/util.go:109-115
-      const contentRange = resp.headers.get("content-range");
+      let contentRange = resp.headers.get("content-range");
+
+      // Cloudflare Workers 已知问题：部分场景下首次子请求会“忽略 Range”，返回 200 且没有 Content-Range。
+      // 但紧接着再次请求，可能会正常返回 206（社区多次反馈，常见于大文件/缓存路径）。
+      //
+      // 这里做一个“轻量自愈”：如果发现 Range 被忽略，就尽快 cancel 掉响应体并重试一次。
+      // - 仅重试 1 次，避免无谓流量与延迟
+      //
+      // 参考（非强依赖）：https://community.cloudflare.com/t/cloudflare-worker-fetch-ignores-byte-request-range-on-initial-request/395047
+      const isCloudflareRuntime = typeof caches !== "undefined";
+      const rangeIgnored = resp.status === 200 && !contentRange;
+      if (isCloudflareRuntime && rangeIgnored) {
+        console.warn(
+            `[StreamDescriptorUtils] Range 可能被上游/平台忽略，准备重试一次: label=${debugLabel || "-"} range=${rangeHeader} status=${resp.status} headers=${JSON.stringify(
+                pickDebugHeaders(resp.headers)
+            )}`
+        );
+        try {
+          await resp.body?.cancel?.();
+        } catch {}
+        resp = await fetchWithRetry("GET(RangeRetry)", () => fetchRangeResponse(signal, rangeHeader, range), { signal });
+        contentRange = resp.headers.get("content-range");
+        if (resp.status === 200 && !contentRange) {
+          console.warn(
+              `[StreamDescriptorUtils] Range 重试后仍未生效: label=${debugLabel || "-"} range=${rangeHeader} status=${resp.status} headers=${JSON.stringify(
+                  pickDebugHeaders(resp.headers)
+              )}`
+          );
+        } else {
+          console.log(
+              `[StreamDescriptorUtils] Range 重试后已生效: label=${debugLabel || "-"} range=${rangeHeader} status=${resp.status} headers=${JSON.stringify(
+                  pickDebugHeaders(resp.headers)
+              )}`
+          );
+        }
+      }
       let isPartial = false;
       if (resp.status === 206) {
         isPartial = true;
@@ -283,12 +347,16 @@ export function createHttpStreamDescriptor({
           const start = Number(m[1]);
           if (Number.isFinite(start) && start === range.start) {
             isPartial = true;
+          } else {
+            console.warn(
+                `[StreamDescriptorUtils] Content-Range 起点不匹配，按不支持 Range 处理: label=${debugLabel || "-"} wantStart=${range.start} got=${contentRange}`
+            );
           }
         }
       }
 
       return {
-        stream,
+        stream: resp.body,
         supportsRange: isPartial,
         // 仅用于上层日志观测（不会写入响应头）：帮助判断“上游到底有没有真 Range”。
         // - upstreamStatus: 上游 HTTP 状态码（常见 206 或 200）
@@ -296,9 +364,10 @@ export function createHttpStreamDescriptor({
         upstreamStatus: resp.status,
         upstreamContentRange: contentRange || null,
         async close() {
-          if (stream && typeof stream.cancel === "function") {
+          const responseStream = resp.body;
+          if (responseStream && typeof responseStream.cancel === "function") {
             try {
-              await stream.cancel();
+              await responseStream.cancel();
             } catch {}
           }
         },
