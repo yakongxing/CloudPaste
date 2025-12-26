@@ -314,7 +314,12 @@ export class WebDavStorageDriver extends BaseDriver {
       },
       async fetchRangeResponse(signal, rangeHeader) {
         const resp = await fetch(fileUrl, {
-          headers: { Authorization: authHeader, Range: rangeHeader },
+          headers: {
+            Authorization: authHeader,
+            Range: rangeHeader,
+            "Accept-Encoding": "identity",
+            "Cache-Control": "no-transform",
+          },
           signal,
         });
         if (!resp.ok) {

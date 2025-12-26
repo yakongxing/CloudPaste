@@ -85,6 +85,7 @@
                     class="flex-1 px-3 py-2 text-sm font-mono border-0 bg-transparent focus:outline-none focus:ring-0"
                     :class="darkMode ? 'text-gray-200 placeholder-gray-500' : 'text-gray-800 placeholder-gray-400'"
                     @keyup.enter="applyQuickPath(pair, 'source')"
+                    @blur="applyQuickPath(pair, 'source')"
                   />
                   <!-- 复制路径按钮 -->
                   <button
@@ -204,6 +205,7 @@
                     class="flex-1 px-3 py-2 text-sm font-mono border-0 bg-transparent focus:outline-none focus:ring-0"
                     :class="darkMode ? 'text-gray-200 placeholder-gray-500' : 'text-gray-800 placeholder-gray-400'"
                     @keyup.enter="applyQuickPath(pair, 'target')"
+                    @blur="applyQuickPath(pair, 'target')"
                   />
                   <!-- 复制路径按钮 -->
                   <button
@@ -241,11 +243,11 @@
                 class="panel-selector"
               >
                 <PathTreeSelector
-                  v-model="pair.targetPath"
+                  v-model="pair.targetFolder"
                   :dark-mode="darkMode"
                   :allow-files="false"
                   max-height="280px"
-                  @update:model-value="onPathSelected(pair, 'target', $event)"
+                  @update:model-value="onTargetFolderSelected(pair, $event)"
                 />
               </div>
 
@@ -349,6 +351,29 @@ import { ref, watch, onMounted } from 'vue'
 import PathTreeSelector from './PathTreeSelector.vue'
 import { IconArrowUp, IconCheckCircle, IconChevronRight, IconClose, IconCopy, IconFolder, IconFolderPlus, IconList } from '@/components/icons'
 
+// ====== 目标路径辅助：从“文件路径/目录路径”推导出“目录路径” ======
+function deriveTargetFolder(targetPath) {
+  const raw = String(targetPath || '').trim()
+  if (!raw) return ''
+
+  let p = raw
+    .replace(/\\\\/g, '/')
+    .replace(/\/{2,}/g, '/')
+
+  if (!p.startsWith('/')) p = `/${p}`
+  if (p === '/') return '/'
+
+  // 已经是目录
+  if (p.endsWith('/')) {
+    return p.replace(/\/+$/g, '/') // 收敛到单个 /
+  }
+
+  // 文件：取父目录
+  const lastSlash = p.lastIndexOf('/')
+  if (lastSlash <= 0) return '/'
+  return p.slice(0, lastSlash + 1) || '/'
+}
+
 const props = defineProps({
   modelValue: {
     type: Object,
@@ -381,6 +406,7 @@ function createNewPair() {
     id: Date.now() + Math.random(),
     sourcePath: '',
     targetPath: '',
+    targetFolder: '',
     sourcePathInput: '',
     targetPathInput: '',
     sourceExpanded: true,
@@ -399,6 +425,7 @@ function parseConfigToPairs(config) {
       id: Date.now() + index + Math.random(),
       sourcePath: pair.sourcePath || '',
       targetPath: pair.targetPath || '',
+      targetFolder: deriveTargetFolder(pair.targetPath || ''),
       sourcePathInput: pair.sourcePath || '',
       targetPathInput: pair.targetPath || '',
       sourceExpanded: !pair.sourcePath,
@@ -412,6 +439,7 @@ function parseConfigToPairs(config) {
       id: Date.now(),
       sourcePath: config.sourcePath || '',
       targetPath: config.targetPath || '',
+      targetFolder: deriveTargetFolder(config.targetPath || ''),
       sourcePathInput: config.sourcePath || '',
       targetPathInput: config.targetPath || '',
       sourceExpanded: !config.sourcePath,
@@ -431,10 +459,11 @@ function parseConfigToOptions(config) {
 }
 
 const toBackendConfig = () => {
-  const allPairs = pathPairs.value.map(p => ({
-    sourcePath: p.sourcePath || '',
-    targetPath: p.targetPath || ''
-  }))
+  const allPairs = pathPairs.value.map(p => {
+    const sourcePath = (p.sourcePathInput || p.sourcePath || '').trim()
+    const targetPath = (p.targetPathInput || p.targetPath || '').trim()
+    return { sourcePath, targetPath }
+  })
 
   if (allPairs.length === 1) {
     return {
@@ -535,6 +564,7 @@ const applyQuickPath = (pair, type) => {
     const input = pair.targetPathInput?.trim()
     if (input) {
       pair.targetPath = input
+      pair.targetFolder = deriveTargetFolder(input)
       pair.targetExpanded = false
     }
   }
@@ -548,6 +578,15 @@ const onPathSelected = (pair, type, path) => {
   }
 }
 
+const onTargetFolderSelected = (pair, folderPath) => {
+  const folder = String(folderPath || '').trim()
+  if (!folder) return
+  // 选择器用于选“文件夹”，所以同步把 targetPath 设置成文件夹路径
+  pair.targetFolder = folder
+  pair.targetPath = folder
+  pair.targetPathInput = folder
+}
+
 const clearPath = (pair, type) => {
   if (type === 'source') {
     pair.sourcePath = ''
@@ -555,6 +594,7 @@ const clearPath = (pair, type) => {
     pair.sourceExpanded = true
   } else {
     pair.targetPath = ''
+    pair.targetFolder = ''
     pair.targetPathInput = ''
     pair.targetExpanded = true
   }

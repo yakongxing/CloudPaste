@@ -48,6 +48,24 @@ export function splitDirAndName(posixPath) {
   return { dirPath: dir || "/", name };
 }
 
+/**
+ * 解析 Telegram 上传的目录与（可选）文件名：
+ * - 当 target 是“目录路径”（以 / 结尾）时，dirPath 应为该目录本身（而不是父目录）
+ * - 当 target 是“文件路径”时，按常规 splitDirAndName 解析
+ *
+ * 说明：前端流式/表单上传会把目录放在 path 里，文件名通过 header/meta 单独传递。
+ * 如果后端把目录路径当成文件路径来 split，会导致写索引时把文件挂到根目录。
+ */
+export function resolveUploadDirAndName(targetPath, { isDirectoryTarget = false } = {}) {
+  const normalized = toPosixPath(targetPath);
+  const treatAsDir = isDirectoryTarget === true || normalized.endsWith("/");
+  if (treatAsDir) {
+    const dir = stripTrailingSlash(normalized);
+    return { dirPath: dir || "/", name: "" };
+  }
+  return splitDirAndName(normalized);
+}
+
 export function safeJsonParse(text) {
   if (!text) return null;
   if (typeof text === "object") return text;

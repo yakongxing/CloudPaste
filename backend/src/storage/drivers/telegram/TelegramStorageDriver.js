@@ -27,6 +27,7 @@ import {
   normalizeApiBaseUrl,
   normalizePartList,
   renameItem as telegramRenameItem,
+  resolveUploadDirAndName,
   safeJsonParse,
   sendDocument as telegramSendDocument,
   splitDirAndName,
@@ -580,7 +581,10 @@ export class TelegramStorageDriver extends BaseDriver {
     const effectiveSubPath = subPath ?? this._extractSubPath(fsPath, mount);
     const targetPath = toPosixPath(effectiveSubPath || fsPath);
 
-    const { dirPath, name: inferredName } = splitDirAndName(targetPath);
+    const isDirectoryTarget =
+      (typeof fsPath === "string" && fsPath.endsWith("/")) ||
+      (typeof effectiveSubPath === "string" && effectiveSubPath.endsWith("/"));
+    const { dirPath, name: inferredName } = resolveUploadDirAndName(targetPath, { isDirectoryTarget });
     const filename = options?.filename || inferredName || inferNameFromPath(fsPath, false) || "upload.bin";
     const contentType = options?.contentType || "application/octet-stream";
     const contentLength = Number(options?.contentLength ?? options?.fileSize ?? 0) || 0;

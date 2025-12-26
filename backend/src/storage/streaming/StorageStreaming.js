@@ -493,6 +493,16 @@ export class StorageStreaming {
 
       const { stream } = handle;
 
+      // 兼容：当上游不支持 Range 时，用 ByteSliceStream 做“软件切片”。
+      // 对软件切片场景移除 Content-Length，让客户端以流结束为准。
+      if (status === 206 && handle?.softwareSlice) {
+        try {
+          headers.delete("Content-Length");
+        } catch {
+          // ignore
+        }
+      }
+
       // 对于 WebReadableStream（有 getReader 方法），直接作为 Response body 交给运行时处理
       if (stream && typeof stream.getReader === "function") {
         const body = wrapWebReadableStreamWithClose(stream, handle?.close);
@@ -709,6 +719,8 @@ export class StorageStreaming {
 
             return {
               stream: slicedStream,
+              // 标记：这是“软件切片”产生的流做针对性兼容处理。
+              softwareSlice: true,
               async close() {
                 // 关闭原始流
                 if (originalClose) {
@@ -748,6 +760,7 @@ export class StorageStreaming {
 
         return {
           stream: slicedStream,
+          softwareSlice: true,
           async close() {
             if (originalClose) {
               await originalClose();
