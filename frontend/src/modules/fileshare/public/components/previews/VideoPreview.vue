@@ -21,7 +21,7 @@
     >
       <VideoPlayer
         ref="videoPlayerRef"
-        v-if="currentPreviewUrl && videoData"
+        v-if="currentPreviewUrl && videoData && !shareHlsBlocked"
         :video="videoData"
         :dark-mode="darkMode"
         :autoplay="false"
@@ -41,9 +41,24 @@
         @ready="handlePlayerReady"
       />
 
+      <!-- 分享页：m3u8 如果引用了相对分片（ts/m4s/key），单文件分享会 404，直接提示即可 -->
+      <div
+        v-if="shareHlsBlocked"
+        class="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700 p-6"
+      >
+        <div class="max-w-xl w-full rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 p-4">
+          <div class="text-base font-semibold text-gray-900 dark:text-white mb-2">
+            {{ t("fileView.preview.video.hlsShareNotSupportedTitle") }}
+          </div>
+          <div class="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">
+            {{ t("fileView.preview.video.hlsShareNotSupportedTip") }}
+          </div>
+        </div>
+      </div>
+
       <!-- 加载状态 -->
       <div
-        v-if="!videoData"
+        v-if="!videoData && !shareHlsBlocked"
         class="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700"
       >
         <LoadingIndicator
@@ -139,10 +154,74 @@ const currentVideoData = ref(null);
 // 为了兼容性，保留 videoData 计算属性
 const videoData = computed(() => currentVideoData.value);
 
+const shareHlsBlocked = ref(false);
+
+// 分享页的 m3u8 识别（只靠文件名/MIME，不依赖 URL 后缀）
+const isHlsByMeta = computed(() => {
+  const name = String(props.filename || "").toLowerCase();
+  const mt = String(props.mimetype || "").toLowerCase();
+  return name.endsWith(".m3u8") || mt.includes("mpegurl") || mt.includes("application/vnd.apple.mpegurl");
+});
+
+// 分享页 HLS：只做最轻量的“相对路径 -> 绝对 URL”纠正
+const createShareHlsUrlTransform = () => {
+  return async (requestUrl) => {
+    const raw = String(requestUrl || "").trim();
+    if (!raw) return requestUrl;
+    // 已经是绝对地址/根路径/数据URL，直接放行
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) || raw.startsWith("//") || raw.startsWith("/") || raw.startsWith("data:") || raw.startsWith("blob:")) {
+      return requestUrl;
+    }
+    // 禁止跳目录
+    if (raw.split("/").includes("..")) return requestUrl;
+    try {
+      const base = new URL(currentPreviewUrl.value, window.location.href);
+      return new URL(raw, base).toString();
+    } catch {
+      return requestUrl;
+    }
+  };
+};
+
+const shareHlsUrlTransform = computed(() => (isHlsByMeta.value ? createShareHlsUrlTransform() : null));
+
+const detectRelativeRefsInM3u8 = async (playlistUrl) => {
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), 6000) : null;
+  try {
+    const res = await fetch(playlistUrl, {
+      method: "GET",
+      headers: { accept: "application/vnd.apple.mpegurl, application/x-mpegurl, */*" },
+      signal: controller?.signal,
+    });
+    if (!res.ok) return false;
+    const text = await res.text();
+    if (!text) return false;
+
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      if (line.startsWith("#EXT-X-KEY")) {
+        const m = /URI="([^"]+)"/i.exec(line);
+        const uri = m?.[1] ? String(m[1]).trim() : "";
+        if (uri && !/^[a-z][a-z0-9+.-]*:\/\//i.test(uri) && !uri.startsWith("/") && !uri.startsWith("//")) return true;
+        continue;
+      }
+      if (line.startsWith("#")) continue;
+      if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(line) && !line.startsWith("/") && !line.startsWith("//")) return true;
+    }
+    return false;
+  } catch {
+    // 拉不到 playlist（CORS/网络）就不拦截，避免误伤“本来能播”的情况
+    return false;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
+
 // 更新页面标题
 const updatePageTitle = (playing = false, fileName = null) => {
   const title = fileName || "视频预览";
-  document.title = playing ? `🎬 ${title}` : `${title}`;
+  document.title = playing ? `${title}` : `${title}`;
 };
 
 // 恢复原始页面标题
@@ -235,6 +314,17 @@ const initializeCurrentVideo = async () => {
     return;
   }
 
+  shareHlsBlocked.value = false;
+  if (isHlsByMeta.value) {
+    const hasRelative = await detectRelativeRefsInM3u8(url);
+    if (hasRelative) {
+      // 单文件分享 + 相对分片：浏览器一定会去请求 /proxy/share/<ts>，导致 404
+      shareHlsBlocked.value = true;
+      currentVideoData.value = null;
+      return;
+    }
+  }
+
   // 构建视频数据对象
   currentVideoData.value = {
     name: props.filename || "视频文件",
@@ -244,6 +334,8 @@ const initializeCurrentVideo = async () => {
     poster: generateDefaultPoster(props.filename),
     contentType: props.mimetype,
     mimetype: props.mimetype,
+    isHLS: isHlsByMeta.value,
+    hlsUrlTransform: isHlsByMeta.value ? shareHlsUrlTransform.value : null,
   };
 };
 

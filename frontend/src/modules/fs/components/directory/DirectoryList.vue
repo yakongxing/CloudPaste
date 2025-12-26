@@ -3,9 +3,9 @@
     <!-- 列表视图的表头 -->
     <div
       v-if="viewMode === 'list'"
-      class="grid items-center py-2 px-3 border-b border-t"
+      class="grid items-center py-2 px-3 border-b sticky top-16 z-10 backdrop-blur-md rounded-t-xl transition-colors duration-200"
       :class="[
-        darkMode ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-100 border-gray-200',
+        darkMode ? 'bg-gray-800/80 border-gray-700' : 'bg-white/80 border-gray-200',
         headerGridClass,
       ]"
     >

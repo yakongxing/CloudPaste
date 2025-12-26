@@ -162,7 +162,7 @@ export class FileViewService {
         // 处理 Range 请求
         const rangeHeader = request.headers.get("Range");
         if (rangeHeader) {
-          console.log(`🎬 分享下载 - 代理 Range 请求: ${rangeHeader}`);
+          console.log(`分享下载 - 代理 Range 请求: ${rangeHeader}`);
         }
 
         // 使用 StorageStreaming 层统一处理内容访问

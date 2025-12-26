@@ -183,17 +183,37 @@ export function createHttpStreamDescriptor({
     supportsRange,
     async probeSize(options = {}) {
       if (typeof currentSize === "number" && currentSize >= 0) return currentSize;
-      if (typeof fetchHeadResponse !== "function") return currentSize;
-
       const { signal } = options;
-      const resp = await fetchWithRetry("HEAD", () => fetchHeadResponse(signal), { signal });
-      if (!resp) return currentSize;
-      if (!resp.ok) return currentSize;
 
-      const inferred = tryInferSizeFromResponse(resp);
-      if (typeof inferred === "number") {
-        currentSize = inferred;
+      // 1) 优先 HEAD
+      if (typeof fetchHeadResponse === "function") {
+        const resp = await fetchWithRetry("HEAD", () => fetchHeadResponse(signal), { signal });
+        if (resp && resp.ok) {
+          const inferred = tryInferSizeFromResponse(resp);
+          if (typeof inferred === "number") {
+            currentSize = inferred;
+            return currentSize;
+          }
+        }
       }
+
+      // 2) 某些上游不支持 HEAD 或不返回 Content-Length：用 bytes=0-0 探测
+      if (typeof fetchRangeResponse === "function") {
+        const rangeHeader = "bytes=0-0";
+        const resp = await fetchWithRetry("GET(RangeProbe)", () => fetchRangeResponse(signal, rangeHeader, { start: 0, end: 0 }), {
+          signal,
+        });
+        if (resp && resp.ok) {
+          const inferred = tryInferSizeFromResponse(resp);
+          if (typeof inferred === "number") {
+            currentSize = inferred;
+          }
+        }
+        try {
+          await resp?.body?.cancel?.();
+        } catch {}
+      }
+
       return currentSize;
     },
     async getStream(options = {}) {
@@ -248,11 +268,33 @@ export function createHttpStreamDescriptor({
       }
 
       const stream = resp.body;
-      const isPartial = resp.status === 206 && !!resp.headers.get("content-range");
+      // 判断上游是否“真的”按 Range 返回了部分内容：
+      // - 标准：206 + Content-Range
+      // - 兼容：部分上游会返回 200 但带 Content-Range（OpenList 也为此做了兼容检查）
+      //   参考：D:/github-project/OpenList/internal/stream/util.go:109-115
+      const contentRange = resp.headers.get("content-range");
+      let isPartial = false;
+      if (resp.status === 206) {
+        isPartial = true;
+      }
+      if (!isPartial && contentRange) {
+        const m = String(contentRange).match(/^bytes\s+(\d+)-(\d+)\/(\d+|\*)/i);
+        if (m && m[1]) {
+          const start = Number(m[1]);
+          if (Number.isFinite(start) && start === range.start) {
+            isPartial = true;
+          }
+        }
+      }
 
       return {
         stream,
         supportsRange: isPartial,
+        // 仅用于上层日志观测（不会写入响应头）：帮助判断“上游到底有没有真 Range”。
+        // - upstreamStatus: 上游 HTTP 状态码（常见 206 或 200）
+        // - upstreamContentRange: 上游 Content-Range（若存在）
+        upstreamStatus: resp.status,
+        upstreamContentRange: contentRange || null,
         async close() {
           if (stream && typeof stream.cancel === "function") {
             try {

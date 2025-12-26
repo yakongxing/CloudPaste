@@ -1,6 +1,6 @@
 <template>
   <div class="mount-explorer-container mx-auto px-3 sm:px-6 flex-1 flex flex-col pt-6 sm:pt-8 w-full max-w-full sm:max-w-6xl">
-    <div class="header mb-4 border-b pb-2 flex justify-between items-center" :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
+    <div class="header mb-4 border-b pb-2 flex justify-between items-center" :class="darkMode ? 'border-gray-800' : 'border-gray-100'">
       <h2 class="text-xl font-semibold" :class="darkMode ? 'text-gray-100' : 'text-gray-900'">{{ $t("mount.title") }}</h2>
 
       <!-- 右侧按钮组 -->
@@ -65,8 +65,8 @@
       <DirectoryReadme v-if="!showFilePreview" position="top" :meta="directoryMeta" :dark-mode="darkMode" />
 
       <!-- 操作按钮 -->
-      <div v-if="!showFilePreview" class="card mb-4">
-        <div class="p-3">
+      <div v-if="!showFilePreview" class="mb-4">
+        <div class="px-1">
           <FileOperations
             :current-path="currentPath"
             :is-virtual="isVirtualDirectory"
@@ -147,9 +147,6 @@
         @close="contextMenuRenameDialogOpen = false"
       />
 
-      <!-- 文件篮面板 -->
-      <FileBasketPanel :is-open="isBasketOpen" :dark-mode="darkMode" @close="closeBasket" @task-created="handleTaskCreated" @show-message="handleShowMessage" />
-
       <!-- 通用 ConfirmDialog 组件替换内联对话框 -->
       <ConfirmDialog
         :is-open="showDeleteDialog"
@@ -206,137 +203,141 @@
       </div>
 
       <!-- 内容区域 - 根据模式显示文件列表或文件预览 -->
-      <div class="card">
-        <!-- 文件列表模式 -->
-        <div v-show="!showFilePreview">
-          <!-- 内嵌式密码验证 -->
-          <PathPasswordDialog
-            v-if="pathPassword.showPasswordDialog.value"
-            :is-open="pathPassword.showPasswordDialog.value"
-            :path="pathPassword.pendingPath.value || currentPath"
-            :dark-mode="darkMode"
-            :inline="true"
-            @verified="handlePasswordVerified"
-            @cancel="handlePasswordCancel"
-            @close="handlePasswordClose"
-            @error="handlePasswordError"
-          />
+      <div class="mount-content bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 transition-colors duration-200">
+        <Transition name="fade-slide" mode="out-in">
+          <!-- 文件列表模式 -->
+          <div v-if="!showFilePreview" key="list">
+            <!-- 内嵌式密码验证 -->
+            <PathPasswordDialog
+              v-if="pathPassword.showPasswordDialog.value"
+              :is-open="pathPassword.showPasswordDialog.value"
+              :path="pathPassword.pendingPath.value || currentPath"
+              :dark-mode="darkMode"
+              :inline="true"
+              @verified="handlePasswordVerified"
+              @cancel="handlePasswordCancel"
+              @close="handlePasswordClose"
+              @error="handlePasswordError"
+            />
 
-          <template v-else>
-            <!-- 非阻塞错误提示：不再用 error 直接替换整个列表区域 -->
-            <div v-if="error" class="mb-4 p-4 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg">
-              <div class="flex items-start justify-between gap-3">
-                <div class="flex items-start">
-                  <IconXCircle size="md" class="w-5 h-5 text-red-500 mr-2 mt-0.5 shrink-0" aria-hidden="true" />
-                  <div>
-                    <div class="text-red-700 dark:text-red-200 font-medium">{{ $t("common.error") }}</div>
-                    <div class="text-red-700/90 dark:text-red-200/90 text-sm mt-0.5">{{ error }}</div>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                      <button
-                        class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
-                        :class="darkMode ? 'bg-red-800/40 hover:bg-red-800/60 text-red-100' : 'bg-red-200 hover:bg-red-300 text-red-900'"
-                        @click="handleRetryDirectory"
-                      >
-                        {{ $t("common.retry") }}
-                      </button>
-                      <button
-                        class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
-                        :class="darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-100' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'"
-                        @click="dismissDirectoryError"
-                      >
-                        {{ $t("common.close") }}
-                      </button>
+            <template v-else>
+              <!-- 非阻塞错误提示：不再用 error 直接替换整个列表区域 -->
+              <div v-if="error" class="mb-4 p-4 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="flex items-start">
+                    <IconXCircle size="md" class="w-5 h-5 text-red-500 mr-2 mt-0.5 shrink-0" aria-hidden="true" />
+                    <div>
+                      <div class="text-red-700 dark:text-red-200 font-medium">{{ $t("common.error") }}</div>
+                      <div class="text-red-700/90 dark:text-red-200/90 text-sm mt-0.5">{{ error }}</div>
+                      <div class="mt-3 flex flex-wrap gap-2">
+                        <button
+                          class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+                          :class="darkMode ? 'bg-red-800/40 hover:bg-red-800/60 text-red-100' : 'bg-red-200 hover:bg-red-300 text-red-900'"
+                          @click="handleRetryDirectory"
+                        >
+                          {{ $t("common.retry") }}
+                        </button>
+                        <button
+                          class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+                          :class="darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-100' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'"
+                          @click="dismissDirectoryError"
+                        >
+                          {{ $t("common.close") }}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <!-- 目录列表 - 保持挂载状态 -->
-            <DirectoryList
-              ref="directoryListRef"
-              :current-path="currentPath"
-              :items="visibleItems"
-              :loading="loading"
-              :is-virtual="isVirtualDirectory"
-              :dark-mode="darkMode"
-              :view-mode="viewMode"
-              :show-checkboxes="explorerSettings.settings.showCheckboxes"
-              :selected-items="getSelectedItems()"
-              :context-highlight-path="contextHighlightPath"
-              :animations-enabled="explorerSettings.settings.animationsEnabled"
-              :file-name-overflow="explorerSettings.settings.fileNameOverflow"
-              :show-action-buttons="explorerSettings.settings.showActionButtons"
-              :rename-loading="isDirectoryListRenaming"
-              @navigate="handleNavigate"
-              @download="handleDownload"
-              @getLink="handleGetLink"
-              @rename="handleRename"
-              @delete="handleDelete"
-              @preview="handlePreview"
-              @item-select="handleItemSelect"
-              @toggle-select-all="toggleSelectAll"
-              @show-message="handleShowMessage"
-              @contextmenu="handleFileContextMenu"
-            />
-          </template>
-        </div>
-
-        <!-- 文件预览模式 -->
-        <div v-show="showFilePreview">
-          <!-- 预览加载状态 -->
-          <div v-if="isPreviewLoading" class="p-8 text-center">
-            <LoadingIndicator
-              :text="$t('common.loading')"
-              :dark-mode="darkMode"
-              size="xl"
-              icon-class="text-blue-500"
-            />
-          </div>
-
-          <!-- 预览错误状态 -->
-          <div v-else-if="previewError" class="p-8 text-center">
-            <div class="flex flex-col items-center space-y-4">
-              <IconExclamation size="3xl" class="w-12 h-12 text-red-500" aria-hidden="true" />
-              <div class="text-red-600 dark:text-red-400">
-                {{ previewError }}
+              <!-- 目录列表 - 保持挂载状态 -->
+              <div class="min-h-[400px]">
+                <DirectoryList
+                  ref="directoryListRef"
+                  :current-path="currentPath"
+                  :items="visibleItems"
+                  :loading="loading"
+                  :is-virtual="isVirtualDirectory"
+                  :dark-mode="darkMode"
+                  :view-mode="viewMode"
+                  :show-checkboxes="explorerSettings.settings.showCheckboxes"
+                  :selected-items="getSelectedItems()"
+                  :context-highlight-path="contextHighlightPath"
+                  :animations-enabled="explorerSettings.settings.animationsEnabled"
+                  :file-name-overflow="explorerSettings.settings.fileNameOverflow"
+                  :show-action-buttons="explorerSettings.settings.showActionButtons"
+                  :rename-loading="isDirectoryListRenaming"
+                  @navigate="handleNavigate"
+                  @download="handleDownload"
+                  @getLink="handleGetLink"
+                  @rename="handleRename"
+                  @delete="handleDelete"
+                  @preview="handlePreview"
+                  @item-select="handleItemSelect"
+                  @toggle-select-all="toggleSelectAll"
+                  @show-message="handleShowMessage"
+                  @contextmenu="handleFileContextMenu"
+                />
               </div>
-              <button @click="closePreviewWithUrl" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
-                {{ $t("common.back") }}
-              </button>
-            </div>
+            </template>
           </div>
 
-          <!-- 预览内容 -->
-          <div v-else-if="previewFile" class="p-4">
-            <!-- 返回按钮 -->
-            <div class="mb-4">
-              <button
-                @click="closePreviewWithUrl"
-                class="inline-flex items-center px-3 py-1.5 rounded-md transition-colors text-sm font-medium"
-                :class="darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'"
-              >
-                <IconBack size="sm" class="w-4 h-4 mr-1.5" aria-hidden="true" />
-                <span>{{ t("mount.backToFileList") }}</span>
-              </button>
+          <!-- 文件预览模式 -->
+          <div v-else key="preview">
+            <!-- 预览加载状态 -->
+            <div v-if="isPreviewLoading" class="p-8 text-center">
+              <LoadingIndicator
+                :text="$t('common.loading')"
+                :dark-mode="darkMode"
+                size="xl"
+                icon-class="text-blue-500"
+              />
             </div>
 
-            <!-- 文件预览内容 -->
-            <FilePreview
-              :file="previewInfo || previewFile"
-              :dark-mode="darkMode"
-              :is-loading="isPreviewLoading"
-              :is-admin="isAdmin"
-              :api-key-info="apiKeyInfo"
-              :has-file-permission="hasFilePermission"
-              :directory-items="visibleItems"
-              @download="handleDownload"
-              @loaded="handlePreviewLoaded"
-              @error="handlePreviewError"
-              @show-message="handleShowMessage"
-            />
+            <!-- 预览错误状态 -->
+            <div v-else-if="previewError" class="p-8 text-center">
+              <div class="flex flex-col items-center space-y-4">
+                <IconExclamation size="3xl" class="w-12 h-12 text-red-500" aria-hidden="true" />
+                <div class="text-red-600 dark:text-red-400">
+                  {{ previewError }}
+                </div>
+                <button @click="closePreviewWithUrl" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                  {{ $t("common.back") }}
+                </button>
+              </div>
+            </div>
+
+            <!-- 预览内容 -->
+            <div v-else-if="previewFile || previewInfo" class="p-4">
+              <!-- 返回按钮 -->
+              <div class="mb-4">
+                <button
+                  @click="closePreviewWithUrl"
+                  class="inline-flex items-center px-3 py-1.5 rounded-md transition-colors text-sm font-medium"
+                  :class="darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'"
+                >
+                  <IconBack size="sm" class="w-4 h-4 mr-1.5" aria-hidden="true" />
+                  <span>{{ t("mount.backToFileList") }}</span>
+                </button>
+              </div>
+
+              <!-- 文件预览内容 -->
+              <FilePreview
+                :file="previewInfo || previewFile"
+                :dark-mode="darkMode"
+                :is-loading="isPreviewLoading"
+                :is-admin="isAdmin"
+                :api-key-info="apiKeyInfo"
+                :has-file-permission="hasFilePermission"
+                :directory-items="visibleItems"
+                @download="handleDownload"
+                @loaded="handlePreviewLoaded"
+                @error="handlePreviewError"
+                @show-message="handleShowMessage"
+              />
+            </div>
           </div>
-        </div>
+        </Transition>
       </div>
 
       <!-- 底部 README -->
@@ -426,7 +427,6 @@ import SearchModal from "@/modules/fs/components/shared/modals/SearchModal.vue";
 import PathPasswordDialog from "@/modules/fs/components/shared/modals/PathPasswordDialog.vue";
 import ConfirmDialog from "@/components/common/dialogs/ConfirmDialog.vue";
 import InputDialog from "@/components/common/dialogs/InputDialog.vue";
-import FileBasketPanel from "@/modules/fs/components/shared/FileBasketPanel.vue";
 import FsMediaLightboxDialog from "@/modules/fs/components/lightbox/FsMediaLightboxDialog.vue";
 import PermissionManager from "@/components/common/PermissionManager.vue";
 import SettingsDrawer from "@/modules/fs/components/shared/SettingsDrawer.vue";
@@ -1317,6 +1317,7 @@ provide("darkMode", darkMode);
 provide("isAdmin", isAdmin);
 provide("apiKeyInfo", apiKeyInfo);
 provide("hasPermissionForCurrentPath", hasPermissionForCurrentPath);
+provide("navigateToFile", navigateToFile);
 
 // 处理认证状态变化
 const handleAuthStateChange = (event) => {
@@ -1405,3 +1406,21 @@ onBeforeUnmount(() => {
   clearSelection();
 });
 </script>
+
+<style scoped>
+/* Smooth View Transitions */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+</style>
