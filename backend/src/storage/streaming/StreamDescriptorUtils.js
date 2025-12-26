@@ -95,16 +95,16 @@ export function createNodeStreamDescriptor({ openStream, openRangeStream, size, 
  * @returns {import("./types.js").StorageStreamDescriptor & { supportsRange?: boolean }}
  */
 export function createHttpStreamDescriptor({
-                                             fetchResponse,
-                                             fetchRangeResponse,
-                                             fetchHeadResponse,
-                                             size = null,
-                                             contentType = null,
-                                             etag = null,
-                                             lastModified = null,
-                                             supportsRange,
-                                             debugLabel = null,
-                                           }) {
+  fetchResponse,
+  fetchRangeResponse,
+  fetchHeadResponse,
+  size = null,
+  contentType = null,
+  etag = null,
+  lastModified = null,
+  supportsRange,
+  debugLabel = null,
+}) {
   let currentSize = typeof size === "number" ? size : null;
 
   const RETRYABLE_HTTP_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -314,9 +314,9 @@ export function createHttpStreamDescriptor({
       const rangeIgnored = resp.status === 200 && !contentRange;
       if (isCloudflareRuntime && rangeIgnored) {
         console.warn(
-            `[StreamDescriptorUtils] Range 可能被上游/平台忽略，准备重试一次: label=${debugLabel || "-"} range=${rangeHeader} status=${resp.status} headers=${JSON.stringify(
-                pickDebugHeaders(resp.headers)
-            )}`
+          `[StreamDescriptorUtils] Range 可能被上游/平台忽略，准备重试一次: label=${debugLabel || "-"} range=${rangeHeader} status=${resp.status} headers=${JSON.stringify(
+            pickDebugHeaders(resp.headers)
+          )}`
         );
         try {
           await resp.body?.cancel?.();
@@ -325,15 +325,15 @@ export function createHttpStreamDescriptor({
         contentRange = resp.headers.get("content-range");
         if (resp.status === 200 && !contentRange) {
           console.warn(
-              `[StreamDescriptorUtils] Range 重试后仍未生效: label=${debugLabel || "-"} range=${rangeHeader} status=${resp.status} headers=${JSON.stringify(
-                  pickDebugHeaders(resp.headers)
-              )}`
+            `[StreamDescriptorUtils] Range 重试后仍未生效: label=${debugLabel || "-"} range=${rangeHeader} status=${resp.status} headers=${JSON.stringify(
+              pickDebugHeaders(resp.headers)
+            )}`
           );
         } else {
           console.log(
-              `[StreamDescriptorUtils] Range 重试后已生效: label=${debugLabel || "-"} range=${rangeHeader} status=${resp.status} headers=${JSON.stringify(
-                  pickDebugHeaders(resp.headers)
-              )}`
+            `[StreamDescriptorUtils] Range 重试后已生效: label=${debugLabel || "-"} range=${rangeHeader} status=${resp.status} headers=${JSON.stringify(
+              pickDebugHeaders(resp.headers)
+            )}`
           );
         }
       }
@@ -349,7 +349,7 @@ export function createHttpStreamDescriptor({
             isPartial = true;
           } else {
             console.warn(
-                `[StreamDescriptorUtils] Content-Range 起点不匹配，按不支持 Range 处理: label=${debugLabel || "-"} wantStart=${range.start} got=${contentRange}`
+              `[StreamDescriptorUtils] Content-Range 起点不匹配，按不支持 Range 处理: label=${debugLabel || "-"} wantStart=${range.start} got=${contentRange}`
             );
           }
         }
