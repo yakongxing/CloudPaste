@@ -293,7 +293,7 @@ export class WebDavStorageDriver extends BaseDriver {
     const wrapError = this._wrapError.bind(this);
     const statusFromError = this._statusFromError.bind(this);
     // 仅对 Range 请求显式关闭缓存
-    const workerNoCacheOptionsForRange = typeof caches !== "undefined" ? { cf: { cacheEverything: false, cacheTtl: 0 } } : {};
+    const workerNoCacheOptionsForRange = typeof caches !== "undefined" ? { cf: { cacheEverything: false } } : {};
 
     return createHttpStreamDescriptor({
       size,
