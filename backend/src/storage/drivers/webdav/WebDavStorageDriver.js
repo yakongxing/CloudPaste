@@ -294,18 +294,13 @@ export class WebDavStorageDriver extends BaseDriver {
     const statusFromError = this._statusFromError.bind(this);
     // 仅对 Range 请求显式关闭缓存
     const workerNoCacheOptionsForRange = typeof caches !== "undefined" ? { cf: { cacheEverything: false } } : {};
-    let debugLabel = "WEBDAV";
-    try {
-      debugLabel = `WEBDAV:${new URL(fileUrl).host}`;
-    } catch {}
 
-    return createHttpStreamDescriptor({
+    const descriptor = createHttpStreamDescriptor({
       size,
       contentType,
       etag,
       lastModified,
       supportsRange: true,
-      debugLabel,
       async fetchResponse(signal) {
         const resp = await fetch(fileUrl, {
           headers: { Authorization: authHeader },
@@ -355,6 +350,13 @@ export class WebDavStorageDriver extends BaseDriver {
         return resp;
       },
     });
+
+    // WebDAV 场景（尤其是 Cloudflare -> Cloudflare）里，Range 经常被上游/平台忽略，
+    // 软件切片会导致“看似 206 但一直加载/黑屏”。
+    // 因此：WebDAV 若上游不支持 Range，就直接降级为 200 全量响应。
+    descriptor.rangeFallbackPolicy = "full";
+
+    return descriptor;
   }
 
   /**

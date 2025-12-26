@@ -492,16 +492,12 @@ export class StorageStreaming {
       }
 
       // 允许 Reader 在打开底层流之后，根据上游真实响应情况“降级为 200”（例如：上游/平台忽略 Range）。
-      // 说明：用于“关闭软切片”模式，让不支持 Range 的场景回退到标准 200 全量响应，避免 206 + 软件切片导致播放卡死等问题。
-      const originalStatus = status;
+      // 用于“关闭软切片”模式，让不支持 Range 的场景回退到标准 200 全量响应，避免 206 + 软件切片导致播放卡死等问题。
       if (typeof handle?.overrideStatus === "number") {
         status = handle.overrideStatus;
       }
       if (handle?.overrideHeaders) {
         headers = handle.overrideHeaders;
-      }
-      if (status !== originalStatus) {
-        console.log(`[StorageStreaming] 最终响应状态已调整: ${originalStatus} -> ${status}`);
       }
 
       const { stream } = handle;
@@ -710,25 +706,51 @@ export class StorageStreaming {
           const supportsRange = streamHandle.supportsRange !== false;
 
           if (!supportsRange) {
-            // 驱动返回了完整流（200），说明上游/平台忽略了 Range。
-            // 为了“都能用/更稳定”，这里不再做软件切片（软切片在部分平台会导致播放器一直加载）。
-            // 改为：直接降级为 200 全量响应，让浏览器按普通下载方式处理。
-            console.log(`[StorageStreaming] 检测到驱动不支持 Range，降级为 200 全量响应（忽略 Range）: ${start}-${end}`);
+            // 默认行为：用 ByteSliceStream 做软件切片（兼容不支持 Range 的上游）。
+            // WebDAV 在 Cloudflare->Cloudflare 场景下，软件切片容易出现“黑屏一直加载”，因此可配置为直接降级 200。
+            const fallbackPolicy = descriptor?.rangeFallbackPolicy || "software";
+
+            if (fallbackPolicy === "full") {
+              console.log(`[StorageStreaming] 检测到驱动不支持 Range，降级为 200 全量响应（忽略 Range）: ${start}-${end}`);
+              if (streamHandle?.upstreamStatus !== undefined || streamHandle?.upstreamContentRange) {
+                console.warn(
+                  `[StorageStreaming] 上游 Range 证据: upstreamStatus=${streamHandle?.upstreamStatus ?? "?"}, contentRange=${streamHandle?.upstreamContentRange ?? ""}`,
+                );
+              }
+
+              const fallbackHeaders = buildResponseHeaders(descriptor, null, channel);
+              return {
+                stream: streamHandle.stream,
+                overrideStatus: 200,
+                overrideHeaders: fallbackHeaders,
+                async close() {
+                  await streamHandle?.close?.();
+                },
+              };
+            }
+
+            console.log(`[StorageStreaming] 检测到驱动不支持 Range，使用 ByteSliceStream 切片: ${start}-${end}`);
             if (streamHandle?.upstreamStatus !== undefined || streamHandle?.upstreamContentRange) {
               console.warn(
                 `[StorageStreaming] 上游 Range 证据: upstreamStatus=${streamHandle?.upstreamStatus ?? "?"}, contentRange=${streamHandle?.upstreamContentRange ?? ""}`,
               );
             }
+            if (start > 0) {
+              const mb = Math.round((start / 1024 / 1024) * 10) / 10;
+              console.warn(`[StorageStreaming] 警告：该切片需要先读取并丢弃前 ${start} 字节（约 ${mb}MB），大跳转会很费流量且很慢`);
+            }
 
-            const fallbackHeaders = buildResponseHeaders(descriptor, null, channel);
+            const originalStream = streamHandle.stream;
+            const originalClose = streamHandle.close;
+            const slicedStream = smartWrapStreamWithByteSlice(originalStream, start, end);
 
             return {
-              // 继续复用这次 getRange 拿到的 Response body（虽然它是 200 全量）。
-              stream: streamHandle.stream,
-              overrideStatus: 200,
-              overrideHeaders: fallbackHeaders,
+              stream: slicedStream,
+              softwareSlice: true,
               async close() {
-                await streamHandle?.close?.();
+                if (originalClose) {
+                  await originalClose();
+                }
               },
             };
           }
@@ -746,18 +768,39 @@ export class StorageStreaming {
         }
 
         // 驱动不支持 getRange 方法，降级使用 ByteSliceStream
-        console.log(`[StorageStreaming] 驱动不支持 getRange 方法，降级为 200 全量响应（忽略 Range）: ${start}-${end}`);
+        const fallbackPolicy = descriptor?.rangeFallbackPolicy || "software";
+        if (fallbackPolicy === "full") {
+          console.log(`[StorageStreaming] 驱动不支持 getRange 方法，降级为 200 全量响应（忽略 Range）: ${start}-${end}`);
+          streamHandle = await descriptor.getStream();
+          const fallbackHeaders = buildResponseHeaders(descriptor, null, channel);
+          return {
+            stream: streamHandle.stream,
+            overrideStatus: 200,
+            overrideHeaders: fallbackHeaders,
+            async close() {
+              await streamHandle?.close?.();
+            },
+          };
+        }
 
-        // 直接返回 200 全量（不做软切片）
+        console.log(`[StorageStreaming] 驱动不支持 getRange 方法，使用 ByteSliceStream 切片: ${start}-${end}`);
+        if (start > 0) {
+          const mb = Math.round((start / 1024 / 1024) * 10) / 10;
+          console.warn(`[StorageStreaming] 警告：该切片需要先读取并丢弃前 ${start} 字节（约 ${mb}MB），大跳转会很费流量且很慢`);
+        }
+
         streamHandle = await descriptor.getStream();
-        const fallbackHeaders = buildResponseHeaders(descriptor, null, channel);
+        const originalStream = streamHandle.stream;
+        const originalClose = streamHandle.close;
+        const slicedStream = smartWrapStreamWithByteSlice(originalStream, start, end);
 
         return {
-          stream: streamHandle.stream,
-          overrideStatus: 200,
-          overrideHeaders: fallbackHeaders,
+          stream: slicedStream,
+          softwareSlice: true,
           async close() {
-            await streamHandle?.close?.();
+            if (originalClose) {
+              await originalClose();
+            }
           },
         };
       },
