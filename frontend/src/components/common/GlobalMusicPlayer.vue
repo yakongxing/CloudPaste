@@ -50,8 +50,6 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import { useDraggable, useWindowSize } from "@vueuse/core";
-import APlayer from "aplayer";
-import "aplayer/dist/APlayer.min.css";
 import { useGlobalPlayerStore } from "@/stores/globalPlayerStore.js";
 import { useThemeMode } from "@/composables/core/useThemeMode.js";
 
@@ -67,6 +65,22 @@ const { isDarkMode } = useThemeMode();
 const playerRef = ref(null);
 const aplayerContainer = ref(null);
 const aplayerInstance = ref(null);
+
+// 默认不需要在首屏就加载。
+let APlayerConstructor = null;
+let aplayerCssLoaded = false;
+let initTaskId = 0;
+
+const ensureAPlayerLoaded = async () => {
+  if (APlayerConstructor) return APlayerConstructor;
+  const mod = await import("aplayer");
+  APlayerConstructor = mod?.default || mod;
+  if (!aplayerCssLoaded) {
+    await import("aplayer/dist/APlayer.min.css");
+    aplayerCssLoaded = true;
+  }
+  return APlayerConstructor;
+};
 
 // 拖动相关状态（VueUse useDraggable）
 const initializedDragPosition = ref(false);
@@ -173,34 +187,53 @@ const initAPlayer = () => {
     storageName: "cloudpaste-aplayer",
   };
 
-  try {
-    aplayerInstance.value = new APlayer(options);
+  // 动态加载 APlayer
+  const taskId = ++initTaskId;
+  Promise.resolve()
+    .then(async () => {
+      const APlayer = await ensureAPlayerLoaded();
+      return new APlayer(options);
+    })
+    .then((ap) => {
+      const shouldAbort =
+        taskId !== initTaskId || !store.isVisible || !store.hasPlaylist || !aplayerContainer.value || !playerRef.value;
+      if (shouldAbort) {
+        try {
+          ap?.destroy?.();
+        } catch {
+          // 忽略销毁异常
+        }
+        return;
+      }
 
-    // 如果有指定的起始索引，切换到该曲目
-    if (store.currentIndex > 0 && store.currentIndex < audioData.length) {
-      aplayerInstance.value.list.switch(store.currentIndex);
-    }
+      aplayerInstance.value = ap;
 
-    // 绑定事件
-    bindAPlayerEvents();
+      // 如果有指定的起始索引，切换到该曲目
+      if (store.currentIndex > 0 && store.currentIndex < audioData.length) {
+        aplayerInstance.value.list.switch(store.currentIndex);
+      }
 
-    // 同步模式配置
-    applyDisplayMode(store.displayMode);
-    applyLoopMode(store.loopMode);
-    applyOrderMode(store.orderMode);
+      // 绑定事件
+      bindAPlayerEvents();
 
-    // 保存实例引用到 store
-    store.setAPlayerInstance(aplayerInstance.value);
+      // 同步模式配置
+      applyDisplayMode(store.displayMode);
+      applyLoopMode(store.loopMode);
+      applyOrderMode(store.orderMode);
 
-    // 聚焦播放器以支持键盘操作
-    nextTick(() => {
-      playerRef.value?.focus();
+      // 保存实例引用到 store
+      store.setAPlayerInstance(aplayerInstance.value);
+
+      // 聚焦播放器以支持键盘操作
+      nextTick(() => {
+        playerRef.value?.focus();
+      });
+
+      console.log("🎵 全局播放器 APlayer 初始化成功");
+    })
+    .catch((error) => {
+      console.error("APlayer 初始化失败:", error);
     });
-
-    console.log("🎵 全局播放器 APlayer 初始化成功");
-  } catch (error) {
-    console.error("APlayer 初始化失败:", error);
-  }
 };
 
 // 绑定 APlayer 事件
@@ -436,6 +469,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  initTaskId++;
   destroyAPlayer();
 });
 

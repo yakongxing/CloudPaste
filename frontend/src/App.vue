@@ -54,6 +54,11 @@ const isDev = import.meta.env.DEV;
       return false;
     }
 
+    // 站点配置还没初始化完之前，不要先按默认值显示页脚
+    if (!siteConfigStore.isInitialized) {
+      return false;
+    }
+
     const footerMarkdown = siteConfigStore.siteFooterMarkdown;
     return footerMarkdown && footerMarkdown.trim();
   });
@@ -101,7 +106,7 @@ const isDev = import.meta.env.DEV;
     useEventListener(window, "global-message-clear", handleGlobalMessageClearEvent);
   });
 
-  // 组件卸载时：useEventListener 会自动清理
+
 </script>
 
 <template>

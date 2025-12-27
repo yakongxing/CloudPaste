@@ -267,16 +267,18 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, nextTick, onMounted, onUnmounted, watch, defineAsyncComponent } from "vue";
 import { useEventListener, useWindowScroll } from "@vueuse/core";
 import { useI18n } from "vue-i18n";
 import { useWindowVirtualizer } from "@tanstack/vue-virtual";
 import FileItem from "./FileItem.vue";
-import GalleryView from "./GalleryView.vue";
+// 仅当切到 viewMode=gallery 时才需要加载。
+const GalleryView = defineAsyncComponent(() => import("./GalleryView.vue"));
 import SkeletonLoader from "../shared/SkeletonLoader.vue";
 import { IconChevronDown, IconChevronUp, IconDelete, IconDownload, IconFolderOpen, IconHamburger, IconLink, IconRename } from "@/components/icons";
 import { getFileIcon } from "@/utils/fileTypeIcons.js";
-import { useDirectorySort, useFileOperations } from "@/composables/index.js";
+import { useDirectorySort } from "@/composables/file-system/useDirectorySort.js";
+import { useFileOperations } from "@/composables/file-system/useFileOperations.js";
 import InputDialog from "@/components/common/dialogs/InputDialog.vue";
 import { createFsItemNameDialogValidator, validateFsItemName } from "@/utils/fsPathUtils.js";
 

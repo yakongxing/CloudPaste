@@ -20,9 +20,6 @@ import "notivue/animations.css";
 // 导入自定义指令
 import { contextMenuDirective } from "./components/common/contextMenu.js";
 
-// 导入PWA相关模块
-import { pwaManager, pwaUtils } from "./pwa/pwaManager.js";
-
 // 开发环境：清理旧的 Service Worker
 if (import.meta.env.DEV && "serviceWorker" in navigator) {
   navigator.serviceWorker.getRegistrations?.().then((registrations) => {
@@ -138,24 +135,41 @@ app.config.globalProperties.$routerUtils = routerUtils;
 // 将API服务挂载到全局对象，方便在组件中使用
 app.config.globalProperties.$api = api;
 
-// 挂载PWA工具到全局对象
-app.config.globalProperties.$pwa = pwaUtils;
-
 // 在开发环境中输出API配置信息
 if (import.meta.env.DEV) {
   console.log("环境信息:", getEnvironmentInfo());
 }
 
-// 初始化完整的PWA功能
-if (pwaManager) {
-  console.log("[PWA] PWA管理器已初始化");
-  console.log("[PWA] 支持功能:", {
-    安装: pwaUtils.isInstallable(),
-    离线存储: !!pwaUtils.storage,
-    版本: pwaUtils.getVersion(),
-    网络状态: pwaUtils.isOnline() ? "在线" : "离线",
-  });
-}
+const scheduleIdle = (fn) => {
+  if (typeof window === "undefined") return;
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(() => fn(), { timeout: 1500 });
+    return;
+  }
+  setTimeout(fn, 800);
+};
+
+scheduleIdle(async () => {
+  try {
+    const mod = await import("./pwa/pwaManager.js");
+    const { pwaManager, pwaUtils } = mod || {};
+
+    // 挂载 PWA 工具到全局对象
+    app.config.globalProperties.$pwa = pwaUtils;
+
+    if (pwaManager) {
+      console.log("[PWA] PWA管理器已初始化");
+      console.log("[PWA] 支持功能:", {
+        安装: pwaUtils?.isInstallable?.(),
+        离线存储: !!pwaUtils?.storage,
+        版本: pwaUtils?.getVersion?.(),
+        网络状态: pwaUtils?.isOnline?.() ? "在线" : "离线",
+      });
+    }
+  } catch (e) {
+    console.warn("[PWA] 延迟加载失败（不影响页面使用）:", e);
+  }
+});
 
 // 确保加载正确的语言
 const savedLang = useLocalStorage("language", i18n.global.locale.value);

@@ -544,7 +544,7 @@ const setupUppy = async () => {
       setupResumeDialogEvents();
     }
 
-    pluginManager.addPluginsToUppy();
+    await pluginManager.addPluginsToUppy();
   } catch (error) {
     console.error("[Uppy] 初始化失败:", error);
     errorMessage.value = t("mount.uppy.initializationFailed", { message: error.message });

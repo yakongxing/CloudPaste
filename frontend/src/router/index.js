@@ -3,12 +3,15 @@
  */
 
 import { createRouter, createWebHistory } from "vue-router";
-import { pwaState } from "../pwa/pwaManager.js";
 import OfflineFallback from "../components/OfflineFallback.vue";
 import { showPageUnavailableToast } from "../pwa/offlineToast.js";
 import { useAuthStore } from "@/stores/authStore.js";
 import NProgress from "nprogress";
 import "nprogress/nprogress.css";
+
+const isProbablyOffline = () => {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+};
 
 // 懒加载组件 - 添加离线错误处理
 const createOfflineAwareImport = (importFn, componentName = "页面") => {
@@ -19,7 +22,7 @@ const createOfflineAwareImport = (importFn, componentName = "页面") => {
       NProgress.done();
 
       // 如果是离线状态且加载失败，显示离线回退页面和Toast提示
-      if (pwaState.isOffline) {
+      if (isProbablyOffline()) {
         console.log("[离线模式] 组件未缓存，显示离线回退页面");
 
         // 显示Toast提示

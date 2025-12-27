@@ -2,7 +2,6 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useIntervalFn, useLocalStorage } from "@vueuse/core";
 import { useI18n } from "vue-i18n";
-import { pwaUtils } from "@/pwa/pwaManager.js";
 import { IconClose, IconComputerDesktop, IconExclamation, IconRefresh } from "@/components/icons";
 
 // 国际化支持
@@ -21,11 +20,14 @@ const showUpdatePrompt = ref(false);
 const isInstalling = ref(false);
 const isUpdating = ref(false);
 
+// 性能优化：PWA 管理器较大，避免首屏就同步引入。
+const pwaUtilsRef = ref(null);
+
 // 计算属性
-const pwaState = pwaUtils.state;
-const canInstall = computed(() => pwaState.isInstallable && !pwaState.isInstalled);
-const hasUpdate = computed(() => pwaState.isUpdateAvailable);
-const isOffline = computed(() => pwaState.isOffline);
+const pwaState = computed(() => pwaUtilsRef.value?.state || {});
+const canInstall = computed(() => Boolean(pwaState.value.isInstallable && !pwaState.value.isInstalled));
+const hasUpdate = computed(() => Boolean(pwaState.value.isUpdateAvailable));
+const isOffline = computed(() => Boolean(pwaState.value.isOffline));
 
 // 记住用户选择：安装提示“暂不显示”的时间戳
 const dismissedAtMs = useLocalStorage("pwa-install-dismissed", 0);
@@ -33,10 +35,11 @@ const dismissedAtMs = useLocalStorage("pwa-install-dismissed", 0);
 // 安装应用
 const installApp = async () => {
   if (isInstalling.value) return;
+  if (!pwaUtilsRef.value) return;
 
   isInstalling.value = true;
   try {
-    const success = await pwaUtils.install();
+    const success = await pwaUtilsRef.value.install();
     if (success) {
       showInstallPrompt.value = false;
     }
@@ -50,15 +53,16 @@ const installApp = async () => {
 // 更新应用
 const updateApp = async () => {
   if (isUpdating.value) return;
+  if (!pwaUtilsRef.value) return;
 
   isUpdating.value = true;
   try {
-    const success = await pwaUtils.update();
+    const success = await pwaUtilsRef.value.update();
     if (success) {
       showUpdatePrompt.value = false;
       // 等待一下然后刷新页面
       setTimeout(() => {
-        pwaUtils.reloadApp();
+        pwaUtilsRef.value?.reloadApp?.();
       }, 1000);
     }
   } catch (error) {
@@ -106,6 +110,32 @@ const { pause: stopStateWatcher, resume: startStateWatcher } = useIntervalFn(
 );
 
 onMounted(() => {
+  // 延迟加载 PWA 管理器
+  const scheduleIdle = (fn) => {
+    if (typeof window === "undefined") return;
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(() => fn(), { timeout: 1500 });
+      return;
+    }
+    setTimeout(fn, 800);
+  };
+
+  scheduleIdle(async () => {
+    try {
+      const mod = await import("@/pwa/pwaManager.js");
+      pwaUtilsRef.value = mod?.pwaUtils || null;
+
+      // PWA 工具到位后，立刻补一次检查
+      checkInstallPrompt();
+      if (hasUpdate.value) {
+        showUpdatePrompt.value = true;
+      }
+    } catch (e) {
+      console.warn("[PWA] pwaManager 延迟加载失败（不影响页面使用）:", e);
+      pwaUtilsRef.value = null;
+    }
+  });
+
   // 检查安装提示
   checkInstallPrompt();
 

@@ -5,7 +5,7 @@ import { h, ref, onMounted, watch, nextTick, onBeforeUnmount, render } from "vue
 import { useEventListener, useMutationObserver, useScroll, useWindowScroll } from "@vueuse/core";
 import { debugLog } from "./PasteViewUtils";
 import HtmlPreviewModal from "@/components/paste-view/preview/HtmlPreviewModal.vue"; // 引入HTML预览弹窗组件
-import { loadVditor, VDITOR_ASSETS_BASE } from "@/utils/vditorLoader.js";
+import { ensureMermaidPatchedForVditor, loadVditor, mightContainMermaid, VDITOR_ASSETS_BASE } from "@/utils/vditorLoader.js";
 import { IconChevronDown, IconEye, IconRefresh } from "@/components/icons";
 
 // 定义组件接收的属性
@@ -129,6 +129,13 @@ let checkboxesCache = null;
 let imagesCache = null;
 let codeBlocksCache = null;
 
+// ===== 内容特征检测：避免无意义地加载大脚本 =====
+const mightContainCodeFence = (text) => /(^|\n)\s*```|(^|\n)\s*~~~/m.test(String(text || ""));
+const mightContainFlowchart = (text) => /(^|\n)\s*```+\s*flowchart\b|(^|\n)\s*~~~+\s*flowchart\b/im.test(String(text || ""));
+const mightContainGraphviz = (text) => /(^|\n)\s*```+\s*(graphviz|dot|viz)\b|(^|\n)\s*~~~+\s*(graphviz|dot|viz)\b/im.test(String(text || ""));
+const mightContainAbc = (text) => /(^|\n)\s*```+\s*abc\b|(^|\n)\s*~~~+\s*abc\b/im.test(String(text || ""));
+const mightContainEcharts = (text) => /(^|\n)\s*```+\s*(echarts|chart|mindmap)\b|(^|\n)\s*~~~+\s*(echarts|chart|mindmap)\b/im.test(String(text || ""));
+
 // 监听内容变化，当内容改变时重新渲染
 watch(
   () => props.content,
@@ -207,6 +214,23 @@ const renderContentInternal = async (content) => {
     codeBlocksCache = null;
 
       try {
+        const hasMermaid = mightContainMermaid(content);
+        const hasFlowchart = mightContainFlowchart(content);
+        const hasGraphviz = mightContainGraphviz(content);
+        const hasAbc = mightContainAbc(content);
+        const hasEcharts = mightContainEcharts(content);
+        const hasCodeFence = mightContainCodeFence(content);
+        const hasAnyDiagram = hasMermaid || hasFlowchart || hasGraphviz || hasAbc || hasEcharts;
+
+        // 如果内容确实包含 Mermaid，先打补丁避免 foreignObject 报错
+        if (hasMermaid) {
+          try {
+            await ensureMermaidPatchedForVditor();
+          } catch (e) {
+            console.warn("[PasteViewPreview] Mermaid 补丁加载失败（将继续渲染）:", e);
+          }
+        }
+
         // 懒加载Vditor
         const VditorConstructor = await loadVditor();
 
@@ -223,7 +247,8 @@ const renderContentInternal = async (content) => {
             },
             cdn: VDITOR_ASSETS_BASE,
             hljs: {
-              lineNumber: true, // 代码块显示行号
+              // 性能优化：只有确实存在代码块时才显示行号，避免无意义的行号计算
+              lineNumber: hasCodeFence,
               style: props.darkMode ? "vs2015" : "github", // 代码高亮样式
             },
             markdown: {
@@ -236,15 +261,22 @@ const renderContentInternal = async (content) => {
               // 添加任务列表支持
               task: true, // 启用任务列表
               // 图表渲染相关配置
-              mermaid: {
-                theme: "default", // 使用固定的主题，不跟随暗色模式变化
-                useMaxWidth: false, // 不使用最大宽度限制
-              },
-              flowchart: {
-                theme: "default", // 使用固定的主题
-              },
-              // 固定图表样式
-              fixDiagramTheme: true, // 自定义属性，用于CSS选择器中识别
+              mermaid: hasMermaid
+                ? {
+                    theme: "default", // 使用固定的主题，不跟随暗色模式变化
+                    useMaxWidth: false, // 不使用最大宽度限制
+                  }
+                : false,
+              flowchart: hasFlowchart
+                ? {
+                    theme: "default", // 使用固定的主题
+                  }
+                : false,
+              graphviz: hasGraphviz,
+              abc: hasAbc,
+              chart: hasEcharts,
+              mindmap: hasEcharts,
+              fixDiagramTheme: hasAnyDiagram, // 自定义属性，用于CSS选择器中识别
             },
             math: {
               engine: "KaTeX", // 数学公式渲染引擎

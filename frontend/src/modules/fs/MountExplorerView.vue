@@ -87,6 +87,7 @@
 
       <!-- 上传弹窗 -->
       <UppyUploadModal
+        v-if="hasEverOpenedUploadModal"
         :is-open="isUploadModalOpen"
         :current-path="currentPath"
         :dark-mode="darkMode"
@@ -98,6 +99,7 @@
 
       <!-- 复制弹窗 -->
       <CopyModal
+        v-if="hasEverOpenedCopyModal"
         :is-open="isCopyModalOpen"
         :dark-mode="darkMode"
         :selected-items="copyModalItems"
@@ -109,7 +111,13 @@
       />
 
       <!-- 任务列表弹窗 -->
-      <TaskListModal :is-open="isTasksModalOpen" :dark-mode="darkMode" @close="handleCloseTasksModal" @task-completed="handleTaskCompleted" />
+      <TaskListModal
+        v-if="hasEverOpenedTasksModal"
+        :is-open="isTasksModalOpen"
+        :dark-mode="darkMode"
+        @close="handleCloseTasksModal"
+        @task-completed="handleTaskCompleted"
+      />
 
       <!-- 新建文件夹弹窗 -->
       <InputDialog
@@ -346,6 +354,7 @@
 
     <!-- 搜索弹窗 -->
     <SearchModal
+      v-if="hasEverOpenedSearchModal"
       :is-open="isSearchModalOpen"
       :dark-mode="darkMode"
       :current-path="currentPath"
@@ -356,13 +365,14 @@
 
     <!-- 设置抽屉 -->
     <SettingsDrawer
+      v-if="hasEverOpenedSettingsDrawer"
       :is-open="isSettingsDrawerOpen"
       :dark-mode="darkMode"
       @close="handleCloseSettingsDrawer"
     />
 
     <!-- FS 媒体查看器（Lightbox Shell） -->
-    <FsMediaLightboxDialog />
+    <FsMediaLightboxDialog v-if="hasEverOpenedLightbox" />
 
     <!-- 悬浮操作栏 (当有选中项时显示) -->
     <FloatingActionBar
@@ -399,7 +409,7 @@
 </template>
 
 <script setup>
-import { ref, computed, provide, onMounted, onBeforeUnmount, watch } from "vue";
+import { ref, computed, provide, onMounted, onBeforeUnmount, watch, defineAsyncComponent } from "vue";
 import { useI18n } from "vue-i18n";
 import { storeToRefs } from "pinia";
 import { useEventListener, useWindowScroll } from "@vueuse/core";
@@ -408,7 +418,11 @@ import { IconBack, IconExclamation, IconSearch, IconSettings, IconXCircle } from
 import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 
 // 组合式函数 - 使用统一聚合导出
-import { useSelection, useFileOperations, useUIState, useFileBasket } from "@/composables/index.js";
+// 按需从具体文件导入
+import { useSelection } from "@/composables/ui-interaction/useSelection.js";
+import { useUIState } from "@/composables/ui-interaction/useUIState.js";
+import { useFileBasket } from "@/composables/file-system/useFileBasket.js";
+import { useFileOperations } from "@/composables/file-system/useFileOperations.js";
 import { usePathPassword } from "@/composables/usePathPassword.js";
 import { useContextMenu } from "@/composables/useContextMenu.js";
 
@@ -420,22 +434,24 @@ import BreadcrumbNav from "@/modules/fs/components/shared/BreadcrumbNav.vue";
 import DirectoryList from "@/modules/fs/components/directory/DirectoryList.vue";
 import DirectoryReadme from "@/modules/fs/components/DirectoryReadme.vue";
 import FileOperations from "@/modules/fs/components/shared/FileOperations.vue";
-import FilePreview from "@/modules/fs/components/preview/FilePreview.vue";
-import UppyUploadModal from "@/modules/fs/components/shared/modals/UppyUploadModal.vue";
-import CopyModal from "@/modules/fs/components/shared/modals/CopyModal.vue";
-import TaskListModal from "@/modules/fs/components/shared/modals/TaskListModal.vue";
-import SearchModal from "@/modules/fs/components/shared/modals/SearchModal.vue";
+// （Uppy、Office、EPUB、视频播放器等）按需加载
+const FilePreview = defineAsyncComponent(() => import("@/modules/fs/components/preview/FilePreview.vue"));
+const UppyUploadModal = defineAsyncComponent(() => import("@/modules/fs/components/shared/modals/UppyUploadModal.vue"));
+const CopyModal = defineAsyncComponent(() => import("@/modules/fs/components/shared/modals/CopyModal.vue"));
+const TaskListModal = defineAsyncComponent(() => import("@/modules/fs/components/shared/modals/TaskListModal.vue"));
+const SearchModal = defineAsyncComponent(() => import("@/modules/fs/components/shared/modals/SearchModal.vue"));
 import PathPasswordDialog from "@/modules/fs/components/shared/modals/PathPasswordDialog.vue";
 import ConfirmDialog from "@/components/common/dialogs/ConfirmDialog.vue";
 import InputDialog from "@/components/common/dialogs/InputDialog.vue";
-import FsMediaLightboxDialog from "@/modules/fs/components/lightbox/FsMediaLightboxDialog.vue";
+const FsMediaLightboxDialog = defineAsyncComponent(() => import("@/modules/fs/components/lightbox/FsMediaLightboxDialog.vue"));
 import PermissionManager from "@/components/common/PermissionManager.vue";
-import SettingsDrawer from "@/modules/fs/components/shared/SettingsDrawer.vue";
+const SettingsDrawer = defineAsyncComponent(() => import("@/modules/fs/components/shared/SettingsDrawer.vue"));
 import FloatingActionBar from "@/modules/fs/components/shared/FloatingActionBar.vue";
 import FloatingToolbar from "@/modules/fs/components/shared/FloatingToolbar.vue";
 import BackToTop from "@/modules/fs/components/shared/BackToTop.vue";
 import { useExplorerSettings } from "@/composables/useExplorerSettings";
 import { createFsItemNameDialogValidator, isSameOrSubPath, validateFsItemName } from "@/utils/fsPathUtils.js";
+import { useFsMediaLightbox } from "@/modules/fs/composables/useFsMediaLightbox";
 
 const { t } = useI18n();
 
@@ -450,6 +466,9 @@ const pathPassword = usePathPassword();
 
 // 右键菜单 - 延迟初始化
 let contextMenu = null;
+
+// Lightbox（模块内单例）
+const fsLightbox = useFsMediaLightbox();
 
 // 文件篮状态
 const { isBasketOpen } = storeToRefs(fileBasket);
@@ -490,6 +509,14 @@ const {
 } = useMountExplorerController();
 
 const { y: windowScrollY } = useWindowScroll();
+
+// ===== 仅“第一次打开”时才加载重弹窗组件 =====
+const hasEverOpenedUploadModal = ref(false);
+const hasEverOpenedCopyModal = ref(false);
+const hasEverOpenedTasksModal = ref(false);
+const hasEverOpenedSearchModal = ref(false);
+const hasEverOpenedSettingsDrawer = ref(false);
+const hasEverOpenedLightbox = ref(false);
 
 const scheduleWindowScrollTo = (top) => {
   if (typeof window === "undefined") return;
@@ -594,6 +621,44 @@ const isCreatingFolder = ref(false);
 
 // 设置抽屉状态
 const isSettingsDrawerOpen = ref(false);
+
+// ===== 仅“第一次打开”时才加载重弹窗组件（watch 需要在依赖变量定义之后注册） =====
+watch(
+  () => isUploadModalOpen.value,
+  (open) => {
+    if (open) hasEverOpenedUploadModal.value = true;
+  }
+);
+watch(
+  () => isCopyModalOpen.value,
+  (open) => {
+    if (open) hasEverOpenedCopyModal.value = true;
+  }
+);
+watch(
+  () => isTasksModalOpen.value,
+  (open) => {
+    if (open) hasEverOpenedTasksModal.value = true;
+  }
+);
+watch(
+  () => isSearchModalOpen.value,
+  (open) => {
+    if (open) hasEverOpenedSearchModal.value = true;
+  }
+);
+watch(
+  () => isSettingsDrawerOpen.value,
+  (open) => {
+    if (open) hasEverOpenedSettingsDrawer.value = true;
+  }
+);
+watch(
+  () => fsLightbox.isOpen.value,
+  (open) => {
+    if (open) hasEverOpenedLightbox.value = true;
+  }
+);
 
 // 初始化用户配置
 const explorerSettings = useExplorerSettings();
