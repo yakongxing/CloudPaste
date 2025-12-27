@@ -350,6 +350,7 @@
 import { ref, watch, onMounted } from 'vue'
 import PathTreeSelector from './PathTreeSelector.vue'
 import { IconArrowUp, IconCheckCircle, IconChevronRight, IconClose, IconCopy, IconFolder, IconFolderPlus, IconList } from '@/components/icons'
+import { copyToClipboard } from '@/utils/clipboard'
 
 // ====== 目标路径辅助：从“文件路径/目录路径”推导出“目录路径” ======
 function deriveTargetFolder(targetPath) {
@@ -603,18 +604,9 @@ const clearPath = (pair, type) => {
 // 复制路径到剪贴板
 const copyPath = async (path) => {
   if (!path) return
-  try {
-    await navigator.clipboard.writeText(path)
-  } catch (err) {
-    // 降级方案：使用 execCommand
-    const textArea = document.createElement('textarea')
-    textArea.value = path
-    textArea.style.position = 'fixed'
-    textArea.style.opacity = '0'
-    document.body.appendChild(textArea)
-    textArea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textArea)
+  const success = await copyToClipboard(path)
+  if (!success) {
+    console.error('复制路径失败:', path)
   }
 }
 

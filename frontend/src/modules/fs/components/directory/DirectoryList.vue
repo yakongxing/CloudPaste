@@ -268,6 +268,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from "vue";
+import { useEventListener, useWindowScroll } from "@vueuse/core";
 import { useI18n } from "vue-i18n";
 import { useWindowVirtualizer } from "@tanstack/vue-virtual";
 import FileItem from "./FileItem.vue";
@@ -364,6 +365,7 @@ const sortedItems = createSortedItems(computed(() => props.items));
 const listContainerRef = ref(null);
 // 容器距离文档顶部的偏移量（用于 Window Virtualizer 的 scrollMargin）
 const scrollMargin = ref(0);
+const { y: windowScrollY } = useWindowScroll();
 
 // 是否启用虚拟滚动（文件数量超过阈值时启用）
 const shouldVirtualize = computed(() => {
@@ -376,7 +378,7 @@ const updateScrollMargin = () => {
   if (listContainerRef.value) {
     const rect = listContainerRef.value.getBoundingClientRect();
     // 计算元素相对于文档顶部的绝对位置
-    scrollMargin.value = rect.top + window.scrollY;
+    scrollMargin.value = rect.top + windowScrollY.value;
   }
 };
 
@@ -409,15 +411,11 @@ onMounted(() => {
   nextTick(() => {
     updateScrollMargin();
   });
-  // 监听窗口 resize 事件，更新 scrollMargin
-  window.addEventListener('resize', updateScrollMargin);
-  // 监听滚动事件，在首次滚动时更新 scrollMargin（确保准确性）
-  window.addEventListener('scroll', updateScrollMargin, { once: true });
+  // 监听窗口 resize/scroll（VueUse 自动管理监听器与清理）
+  useEventListener(window, 'resize', updateScrollMargin);
+  useEventListener(window, 'scroll', updateScrollMargin, { once: true });
 });
 
-onUnmounted(() => {
-  window.removeEventListener('resize', updateScrollMargin);
-});
 
 // 计算表头网格布局类 - 根据勾选框显示和操作按钮显示状态动态调整
 const headerGridClass = computed(() => {

@@ -75,6 +75,7 @@
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useEventListener } from "@vueuse/core";
 import VideoPlayer from "@/components/common/VideoPlayer.vue";
 import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 import { useProviderSelector } from "@/composables/file-preview/useProviderSelector.js";
@@ -388,15 +389,16 @@ const handleKeydown = (event) => {
   }
 };
 
+// 注册键盘事件（自动清理）
+useEventListener(document, "keydown", handleKeydown);
+
 // 生命周期钩子
 onMounted(() => {
   originalTitle.value = document.title;
-  document.addEventListener("keydown", handleKeydown);
 });
 
 onBeforeUnmount(() => {
   restoreOriginalTitle();
-  document.removeEventListener("keydown", handleKeydown);
 });
 </script>
 

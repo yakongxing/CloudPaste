@@ -259,6 +259,7 @@
 import { computed, ref, onMounted, watch, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
+import { setFilePassword } from "@/utils/filePasswordUtils.js";
 import { getFilePassword as resolveFilePassword } from "@/utils/filePasswordUtils.js";
 import { useFileshareService } from "@/modules/fileshare/fileshareService.js";
 import { isImageLikeForExif, loadExifTagsFromArrayBufferAsync, buildExifRows, resolveGpsCoordinates } from "@/utils/exifReaderUtils.js";
@@ -706,7 +707,7 @@ const savePasswordToSessionStorage = () => {
 
     // 如果找到了密码，保存到会话存储
     if (password) {
-      sessionStorage.setItem(`file_password_${props.fileInfo.slug}`, password);
+      setFilePassword(props.fileInfo.slug, password);
     }
   } catch {
     // ignore

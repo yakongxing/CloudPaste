@@ -3,6 +3,7 @@
 // 负责协调预览、大纲和编辑功能，管理全局状态和数据流
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
+import { useEventListener } from "@vueuse/core";
 
 import PasteViewPreview from "./PasteViewPreview.vue";
 import PasteViewOutline from "./PasteViewOutline.vue";
@@ -543,9 +544,6 @@ onMounted(async () => {
   debugLog(enableDebug.value, isDev, "PasteView: 组件挂载", props.slug);
   mounted = true;
 
-  // 监听认证状态变化事件
-  window.addEventListener("auth-state-changed", handleAuthStateChange);
-
   // 延迟加载以确保DOM已准备就绪
   setTimeout(async () => {
     await loadPaste();
@@ -553,19 +551,20 @@ onMounted(async () => {
 });
 
 // 处理认证状态变化
-const handleAuthStateChange = (event) => {
+function handleAuthStateChange(event) {
   debugLog(enableDebug.value, isDev, "PasteViewMain: 认证状态变化", event.detail);
   // 重新检查创建者状态
   checkCreatorStatus();
-};
+}
+
+// 监听认证状态变化（自动清理）
+useEventListener(window, "auth-state-changed", handleAuthStateChange);
 
 // 组件卸载时清理资源
 onBeforeUnmount(() => {
   debugLog(enableDebug.value, isDev, "PasteView: 组件卸载");
   mounted = false;
   paste.value = null;
-  // 移除事件监听
-  window.removeEventListener("auth-state-changed", handleAuthStateChange);
 });
 </script>
 

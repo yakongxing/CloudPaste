@@ -2,6 +2,7 @@
 // PasteViewPreview组件 - 用于渲染Markdown内容并提供预览功能
 // 该组件使用Vditor库渲染复杂的Markdown内容，支持代码高亮、数学公式等高级特性
 import { h, ref, onMounted, watch, nextTick, onBeforeUnmount, render } from "vue";
+import { useEventListener, useMutationObserver, useScroll, useWindowScroll } from "@vueuse/core";
 import { debugLog } from "./PasteViewUtils";
 import HtmlPreviewModal from "@/components/paste-view/preview/HtmlPreviewModal.vue"; // 引入HTML预览弹窗组件
 import { loadVditor, VDITOR_ASSETS_BASE } from "@/utils/vditorLoader.js";
@@ -47,14 +48,17 @@ const previewSvgContent = ref("");
 const emit = defineEmits(["rendered"]);
 // 用于保存预览元素的引用
 const previewElement = ref(null);
+const { y: windowScrollY } = useWindowScroll();
+const { y: contentScrollY } = useScroll(previewElement);
 // 跟踪内容是否已经渲染
 const contentRendered = ref(false);
 // 存储滚动位置
 const savedScrollPosition = ref({ window: 0, content: 0 });
-// MutationObserver实例，用于清理
-let mutationObserver = null;
+// MutationObserver stop（VueUse 管理），用于清理
+let stopMutationObserver = null;
 // 存储定时器ID，用于清理
 const timeoutIds = new Set();
+let stopPreviewImageClickListener = null;
 
 // 将 Vue 图标组件渲染到指定 DOM 容器（用于非 Vue 管理的动态 DOM）
 const renderIconInto = (container, IconComponent, props = {}) => {
@@ -80,8 +84,8 @@ const clearAllTimeouts = () => {
 // 保存当前滚动位置
 const saveScrollPosition = () => {
   savedScrollPosition.value = {
-    window: window.scrollY,
-    content: previewElement.value ? previewElement.value.scrollTop : 0,
+    window: windowScrollY.value,
+    content: previewElement.value ? contentScrollY.value : 0,
   };
   debugLog(props.enableDebug, props.isDev, "保存滚动位置:", savedScrollPosition.value);
 };
@@ -90,11 +94,11 @@ const saveScrollPosition = () => {
 const restoreScrollPosition = () => {
   nextTick(() => {
     // 恢复窗口滚动位置
-    window.scrollTo(0, savedScrollPosition.value.window);
+    windowScrollY.value = savedScrollPosition.value.window;
 
     // 恢复内容滚动位置（如果预览元素有滚动）
     if (previewElement.value) {
-      previewElement.value.scrollTop = savedScrollPosition.value.content;
+      contentScrollY.value = savedScrollPosition.value.content;
     }
 
     debugLog(props.enableDebug, props.isDev, "恢复滚动位置:", savedScrollPosition.value);
@@ -309,33 +313,39 @@ const renderContentInternal = async (content) => {
               setupTaskListInteraction();
 
               // 清理之前的观察器
-              if (mutationObserver) {
-                mutationObserver.disconnect();
+              if (typeof stopMutationObserver === "function") {
+                stopMutationObserver();
+                stopMutationObserver = null;
               }
 
               // 设置DOM观察器，处理动态变化 - 优化性能
-              mutationObserver = new MutationObserver((mutations) => {
-                // 只在有相关变化时才处理
-                const hasRelevantChanges = mutations.some((mutation) => mutation.type === "childList" && (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0));
-
-                if (hasRelevantChanges) {
-                  // 清理缓存，强制重新查询
-                  checkboxesCache = null;
-                  diagramContainersCache = null;
-                  codeBlocksCache = null;
-                  // 延迟短暂时间后运行，确保DOM更新完成
-                  safeSetTimeout(setupTaskListInteraction, 50);
-                }
-              });
-
               // 监听DOM变化 - 只监听必要的变化
               if (previewElement.value) {
-                mutationObserver.observe(previewElement.value, {
-                  childList: true,
-                  subtree: true,
-                  attributes: false, // 不监听属性变化
-                  characterData: false, // 不监听文本变化
-                });
+                const { stop } = useMutationObserver(
+                  previewElement,
+                  (mutations) => {
+                    // 只在有相关变化时才处理
+                    const hasRelevantChanges = mutations.some(
+                      (mutation) => mutation.type === "childList" && (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)
+                    );
+
+                    if (hasRelevantChanges) {
+                      // 清理缓存，强制重新查询
+                      checkboxesCache = null;
+                      diagramContainersCache = null;
+                      codeBlocksCache = null;
+                      // 延迟短暂时间后运行，确保DOM更新完成
+                      safeSetTimeout(setupTaskListInteraction, 50);
+                    }
+                  },
+                  {
+                    childList: true,
+                    subtree: true,
+                    attributes: false, // 不监听属性变化
+                    characterData: false, // 不监听文本变化
+                  }
+                );
+                stopMutationObserver = stop;
               } else {
                 console.warn("无法设置MutationObserver：预览元素不存在");
               }
@@ -434,11 +444,14 @@ onMounted(() => {
 const setupImagePreview = () => {
   if (!previewElement.value) return;
 
-  // 移除之前的事件监听器（如果存在）
-  previewElement.value.removeEventListener("click", handleImageClick);
+  // 先停掉旧的监听，避免重复绑定
+  if (typeof stopPreviewImageClickListener === "function") {
+    stopPreviewImageClickListener();
+    stopPreviewImageClickListener = null;
+  }
 
-  // 添加事件委托
-  previewElement.value.addEventListener("click", handleImageClick);
+  // 添加事件委托（自动清理）
+  stopPreviewImageClickListener = useEventListener(previewElement, "click", handleImageClick);
 
   // 为所有图片添加可点击样式
   const images = previewElement.value.querySelectorAll("img");
@@ -500,14 +513,15 @@ onBeforeUnmount(() => {
   clearAllTimeouts();
 
   // 清理MutationObserver
-  if (mutationObserver) {
-    mutationObserver.disconnect();
-    mutationObserver = null;
+  if (typeof stopMutationObserver === "function") {
+    stopMutationObserver();
+    stopMutationObserver = null;
   }
 
   // 清理图片预览事件监听器
-  if (previewElement.value) {
-    previewElement.value.removeEventListener("click", handleImageClick);
+  if (typeof stopPreviewImageClickListener === "function") {
+    stopPreviewImageClickListener();
+    stopPreviewImageClickListener = null;
   }
 
   // 清理DOM缓存

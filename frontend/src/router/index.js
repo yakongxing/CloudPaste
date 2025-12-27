@@ -19,7 +19,7 @@ const createOfflineAwareImport = (importFn, componentName = "页面") => {
       NProgress.done();
 
       // 如果是离线状态且加载失败，显示离线回退页面和Toast提示
-      if (pwaState.isOffline || !navigator.onLine) {
+      if (pwaState.isOffline) {
         console.log("[离线模式] 组件未缓存，显示离线回退页面");
 
         // 显示Toast提示
@@ -317,12 +317,18 @@ const router = createRouter({
   history: createWebHistory(),
   routes,
   scrollBehavior(to, from, savedPosition) {
-    // 保持原有的滚动行为
-    if (savedPosition) {
-      return savedPosition;
-    } else {
-      return { top: 0 };
+    // MountExplorer 的滚动由页面自身管理（用于“预览 ↔ 列表”保持原位/恢复）
+    const isMountExplorer = (r) => r?.name === "MountExplorer" || r?.name === "MountExplorerPath";
+    if (isMountExplorer(to) && isMountExplorer(from)) {
+      // 返回 false：表示不做任何自动滚动处理，保持当前滚动
+      return false;
     }
+
+    // 浏览器前进/后退：优先使用浏览器提供的滚动位置
+    if (savedPosition) return savedPosition;
+
+    // 其它页面：保持默认“进新页回到顶部”的行为
+    return { top: 0 };
   },
 });
 
@@ -582,7 +588,7 @@ router.onError((error) => {
 
   // 如果是离线状态下的组件加载失败，不需要额外处理
   // 因为 createOfflineAwareImport 已经处理了
-  if (pwaState.isOffline || !navigator.onLine) {
+  if (pwaState.isOffline) {
     console.log("[离线模式] 路由错误已由离线回退机制处理");
     return;
   }

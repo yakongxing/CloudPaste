@@ -297,6 +297,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, h } from 'vue'
+import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { listJobs, getJobStatus, cancelJob, deleteJob, batchCopyItems, listJobTypes } from '@/api/services/fsService'
 import { useThemeMode } from '@/composables/core/useThemeMode.js'
@@ -346,7 +347,15 @@ const filters = ref({
 const selectedTaskId = ref(null)
 const selectedTasks = ref([])
 const { pagination, pageSizeOptions, changePageSize } = useAdminBase('tasks')
-let pollInterval = null
+const { pause: pausePoll, resume: resumePoll } = useIntervalFn(
+  () => {
+    if (tasks.value.some(t => t.status === 'running' || t.status === 'pending')) {
+      pollRunningTasks()
+    }
+  },
+  3000,
+  { immediate: false }
+)
 
 const isTaskCancellable = (task) => {
   if (!task) return false
@@ -967,17 +976,11 @@ onMounted(() => {
   fetchJobTypes()
   fetchTasks()
   // 仅在存在运行中/待执行任务时轮询
-  pollInterval = setInterval(() => {
-    if (tasks.value.some(t => t.status === 'running' || t.status === 'pending')) {
-      pollRunningTasks()
-    }
-  }, 3000)
+  resumePoll()
 })
 
 onUnmounted(() => {
-  if (pollInterval) {
-    clearInterval(pollInterval)
-  }
+  pausePoll()
 })
 </script>
 

@@ -331,6 +331,7 @@
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount, computed, defineComponent, h } from "vue";
 import { useI18n } from "vue-i18n";
+import { useEventListener } from "@vueuse/core";
 import { IconChevronLeft, IconChevronRight, IconMenu, IconClose, IconExclamation, IconBookmark, IconBookmarkSolid, IconArrowLeft, IconArrowRight } from "@/components/icons";
 import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 import { useEpubProgress, useReadingHistory, generateBookId } from "@/composables/useEpubProgress.js";
@@ -375,8 +376,10 @@ const rootRef = ref(null);
 const loading = ref(true);
 const error = ref(false);
 const currentViewEl = ref(null);
-let currentContentDoc = null;
+const currentContentDocRef = ref(null);
 let loadSeq = 0;
+let stopViewRelocateListener = null;
+let stopViewLoadListener = null;
 
 const viewReady = computed(() => Boolean(currentViewEl.value));
 
@@ -597,6 +600,10 @@ const handleKeydown = (event) => {
   }
 };
 
+// 注册键盘事件（自动清理）
+useEventListener(document, "keydown", handleKeydown);
+useEventListener(currentContentDocRef, "keydown", handleKeydown);
+
 const handleRelocate = (event) => {
   const detail = event?.detail || {};
   if (typeof detail.fraction === "number" && Number.isFinite(detail.fraction)) {
@@ -628,16 +635,7 @@ const handleRelocate = (event) => {
 const handleLoadContentDoc = (event) => {
   const doc = event?.detail?.doc;
   if (doc && typeof doc.addEventListener === "function") {
-    try {
-      if (currentContentDoc && typeof currentContentDoc.removeEventListener === "function") {
-        currentContentDoc.removeEventListener("keydown", handleKeydown);
-      }
-    } catch {
-      // ignore
-    }
-
-    currentContentDoc = doc;
-    doc.addEventListener("keydown", handleKeydown);
+    currentContentDocRef.value = doc;
   }
 };
 
@@ -680,20 +678,19 @@ const handleGoToFraction = async () => {
 };
 
 const cleanup = () => {
-  try {
-    if (currentContentDoc && typeof currentContentDoc.removeEventListener === "function") {
-      currentContentDoc.removeEventListener("keydown", handleKeydown);
-    }
-  } catch {
-    // ignore
+  currentContentDocRef.value = null;
+  if (typeof stopViewRelocateListener === "function") {
+    stopViewRelocateListener();
+    stopViewRelocateListener = null;
   }
-  currentContentDoc = null;
+  if (typeof stopViewLoadListener === "function") {
+    stopViewLoadListener();
+    stopViewLoadListener = null;
+  }
 
   if (currentViewEl.value) {
     try {
       currentViewEl.value.close?.();
-      currentViewEl.value.removeEventListener?.("relocate", handleRelocate);
-      currentViewEl.value.removeEventListener?.("load", handleLoadContentDoc);
       currentViewEl.value.remove?.();
     } catch {
       // ignore
@@ -729,8 +726,8 @@ const openBook = async () => {
     hostRef.value?.appendChild(viewEl);
     currentViewEl.value = viewEl;
 
-    viewEl.addEventListener("relocate", handleRelocate);
-    viewEl.addEventListener("load", handleLoadContentDoc);
+    stopViewRelocateListener = useEventListener(viewEl, "relocate", handleRelocate);
+    stopViewLoadListener = useEventListener(viewEl, "load", handleLoadContentDoc);
 
     await viewEl.open(url);
     if (seq !== loadSeq) return;
@@ -791,7 +788,6 @@ const openBook = async () => {
 
 onMounted(() => {
   openBook();
-  document.addEventListener("keydown", handleKeydown);
 });
 
 watch(
@@ -829,7 +825,6 @@ watch(sidebarOpen, (open) => {
 
 onBeforeUnmount(() => {
   loadSeq++;
-  document.removeEventListener("keydown", handleKeydown);
   clearTimeout(toolbarTimer);
 
   // 立即保存阅读进度

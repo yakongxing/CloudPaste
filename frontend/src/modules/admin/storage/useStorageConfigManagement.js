@@ -1,5 +1,6 @@
 import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useLocalStorage } from "@vueuse/core";
 import { useAdminBase } from "@/composables/admin-management/useAdminBase.js";
 import { useStorageConfigsStore } from "@/stores/storageConfigsStore.js";
 import { useAdminStorageConfigService } from "@/modules/admin/services/storageConfigService.js";
@@ -87,15 +88,16 @@ export function useStorageConfigManagement(options = {}) {
   const pageSizeOptions = [4, 8, 12];
 
   // 重写默认页面大小，默认 4 条记录
+  const storedPageSizes = useLocalStorage("admin-page-size", {});
   const getDefaultPageSize = () => {
     try {
-      const saved = localStorage.getItem("admin-page-size");
-      if (saved) {
-        const pageSizes = JSON.parse(saved);
-        const savedSize = pageSizes["storage"] || 4;
-        // 确保保存的值在分页选项范围内，否则使用默认值4
-        return pageSizeOptions.includes(savedSize) ? savedSize : 4;
-      }
+      const pageSizes = storedPageSizes.value;
+      const savedSize =
+        pageSizes && typeof pageSizes === "object"
+          ? pageSizes["storage"] || 4
+          : 4;
+      // 确保保存的值在分页选项范围内，否则使用默认值 4
+      return pageSizeOptions.includes(savedSize) ? savedSize : 4;
     } catch (error) {
       console.warn("解析存储配置分页设置失败:", error);
     }

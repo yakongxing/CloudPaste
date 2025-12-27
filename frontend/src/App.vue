@@ -1,6 +1,7 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed } from "vue";
+import { ref, onMounted, computed } from "vue";
 import { useRoute } from "vue-router";
+import { useEventListener } from "@vueuse/core";
 import EnvSwitcher from "./components/EnvSwitcher.vue";
 import LanguageSwitcher from "./components/LanguageSwitcher.vue";
 import PWAInstallPrompt from "./components/PWAInstallPrompt.vue";
@@ -96,15 +97,11 @@ const isDev = import.meta.env.DEV;
 
     console.log("应用初始化完成");
 
-    window.addEventListener("global-message", handleGlobalMessageEvent);
-    window.addEventListener("global-message-clear", handleGlobalMessageClearEvent);
+    useEventListener(window, "global-message", handleGlobalMessageEvent);
+    useEventListener(window, "global-message-clear", handleGlobalMessageClearEvent);
   });
 
-  // 组件卸载时不再需要额外清理主题监听（由 useThemeMode 管理）
-  onBeforeUnmount(() => {
-    window.removeEventListener("global-message", handleGlobalMessageEvent);
-    window.removeEventListener("global-message-clear", handleGlobalMessageClearEvent);
-  });
+  // 组件卸载时：useEventListener 会自动清理
 </script>
 
 <template>

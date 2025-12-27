@@ -135,9 +135,15 @@ class SessionManager {
     this.pausedFiles = new Set();
 
     // 定期清理过期会话
-    this.cleanupInterval = setInterval(() => {
-      this.cleanupExpiredSessions();
-    }, 5 * 60 * 1000); // 5分钟清理一次
+    this.cleanupTimer = null;
+    const loop = () => {
+      try {
+        this.cleanupExpiredSessions();
+      } finally {
+        this.cleanupTimer = setTimeout(loop, 5 * 60 * 1000);
+      }
+    };
+    this.cleanupTimer = setTimeout(loop, 5 * 60 * 1000);
   }
 
   createSession(fileId, sessionData) {
@@ -208,8 +214,9 @@ class SessionManager {
   }
 
   destroy() {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
+    if (this.cleanupTimer) {
+      clearTimeout(this.cleanupTimer);
+      this.cleanupTimer = null;
     }
     this.sessions.clear();
     this.pausedFiles.clear();
@@ -1250,9 +1257,13 @@ export class StorageAdapter {
 
           // 返回一个等待恢复的Promise
           return new Promise((resolve, reject) => {
-            const checkResumeInterval = setInterval(() => {
+            let resumeTimer = null;
+            const checkResume = () => {
               if (!this.isFilePaused(fileId)) {
-                clearInterval(checkResumeInterval);
+                if (resumeTimer) {
+                  clearTimeout(resumeTimer);
+                  resumeTimer = null;
+                }
                 console.log(`[StorageAdapter] ▶️ 分片${partNumber}恢复上传`);
                 this.uploadPartBytes({
                   signature,
@@ -1264,12 +1275,18 @@ export class StorageAdapter {
                 })
                   .then(resolve)
                   .catch(reject);
+                return;
               }
-            }, 100);
+              resumeTimer = setTimeout(checkResume, 100);
+            };
+            resumeTimer = setTimeout(checkResume, 100);
 
             if (signal) {
               signal.addEventListener("abort", () => {
-                clearInterval(checkResumeInterval);
+                if (resumeTimer) {
+                  clearTimeout(resumeTimer);
+                  resumeTimer = null;
+                }
                 reject(new DOMException("The operation was aborted", "AbortError"));
               });
             }

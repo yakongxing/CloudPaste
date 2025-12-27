@@ -1,4 +1,5 @@
-import { ref, onMounted, onBeforeUnmount, unref } from "vue";
+import { ref, onMounted, unref } from "vue";
+import { useEventListener } from "@vueuse/core";
 
 /**
  * 通用"元素全屏"工具（Fullscreen API）
@@ -77,13 +78,10 @@ export function useElementFullscreen(targetRef, options = {}) {
     syncState();
   };
 
-  onMounted(() => {
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    syncState();
-  });
+  useEventListener(document, "fullscreenchange", handleFullscreenChange);
 
-  onBeforeUnmount(() => {
-    document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  onMounted(() => {
+    syncState();
   });
 
   return {

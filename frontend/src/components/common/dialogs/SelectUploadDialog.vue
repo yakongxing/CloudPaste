@@ -134,10 +134,12 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from "vue";
+import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { formatDateTimeWithSeconds } from "@/utils/timeUtils.js";
 import { IconCheckbox, IconClock, IconCopy, IconDocument } from "@/components/icons";
+import { useEventListener } from "@vueuse/core";
+import { copyToClipboard } from "@/utils/clipboard";
 
 // 国际化
 const { t } = useI18n();
@@ -302,21 +304,12 @@ const formatUploadId = (uploadId) => {
 // 制上传ID到剪贴板
 const copyUploadId = async (uploadId) => {
   try {
-    await navigator.clipboard.writeText(uploadId);
+    const success = await copyToClipboard(uploadId);
+    if (!success) {
+      throw new Error("copy_failed");
+    }
   } catch (error) {
     console.error("复制失败:", error);
-    // 降级方案：使用传统的复制方法
-    try {
-      const textArea = document.createElement("textarea");
-      textArea.value = uploadId;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textArea);
-      console.log("上传ID已复制到剪贴板 (降级方案):", uploadId);
-    } catch (fallbackError) {
-      console.error("降级复制也失败:", fallbackError);
-    }
   }
 };
 
@@ -368,14 +361,8 @@ const handleKeydown = (event) => {
   }
 };
 
-// 生命周期
-onMounted(() => {
-  document.addEventListener("keydown", handleKeydown);
-});
-
-onUnmounted(() => {
-  document.removeEventListener("keydown", handleKeydown);
-});
+// 生命周期：自动注册/清理事件
+useEventListener(document, "keydown", handleKeydown);
 </script>
 
 <style scoped>

@@ -29,8 +29,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { useEventListener } from "@vueuse/core";
 import { copyToClipboard as clipboardCopy } from "@/utils/clipboard";
 import markdownToWord from "@/utils/markdownToWord";
 import { formatNowForFilename } from "@/utils/timeUtils.js";
@@ -230,15 +231,8 @@ const handleGlobalClick = (event) => {
   }
 };
 
-// 组件挂载
-onMounted(() => {
-  document.addEventListener("click", handleGlobalClick);
-});
-
-// 组件卸载
-onUnmounted(() => {
-  document.removeEventListener("click", handleGlobalClick);
-});
+// 监听全局点击（自动清理）
+useEventListener(document, "click", handleGlobalClick);
 </script>
 
 <style scoped>

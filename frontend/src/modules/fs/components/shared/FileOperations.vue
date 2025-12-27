@@ -53,7 +53,7 @@
             @click="changeViewMode('list')"
             class="inline-flex items-center px-2 py-1.5 transition-colors text-sm"
             :class="[viewMode === 'list' ? (darkMode ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-800') : darkMode ? 'bg-gray-800 text-gray-400' : 'bg-white text-gray-500']"
-            :title="t('mount.viewMode.list')"
+            :title="t('mount.viewModes.list')"
           >
             <IconList size="sm" />
           </button>
@@ -63,7 +63,7 @@
             @click="changeViewMode('grid')"
             class="inline-flex items-center px-2 py-1.5 transition-colors text-sm"
             :class="[viewMode === 'grid' ? (darkMode ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-800') : darkMode ? 'bg-gray-800 text-gray-400' : 'bg-white text-gray-500']"
-            :title="t('mount.viewMode.grid')"
+            :title="t('mount.viewModes.grid')"
           >
             <IconGrid size="sm" />
           </button>
@@ -75,7 +75,7 @@
             :class="[
               viewMode === 'gallery' ? (darkMode ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-800') : darkMode ? 'bg-gray-800 text-gray-400' : 'bg-white text-gray-500',
             ]"
-            :title="t('mount.viewMode.gallery')"
+            :title="t('mount.viewModes.gallery')"
           >
             <IconGallery size="sm" />
           </button>
@@ -86,7 +86,7 @@
           @click="$emit('refresh')"
           class="inline-flex items-center px-3 py-1.5 rounded-md transition-colors text-sm font-medium ml-2"
           :class="darkMode ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'"
-          :title="t('common.refresh')"
+          :title="t('mount.operations.refresh')"
         >
           <IconRefresh size="sm" />
         </button>  

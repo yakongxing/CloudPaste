@@ -129,6 +129,7 @@ import { useSiteConfigStore } from "./stores/siteConfigStore.js";
 
 // 导入路由工具函数
 import { routerUtils } from "./router";
+import { useLocalStorage } from "@vueuse/core";
 
 // 提供全局 navigateTo 函数，保持向后兼容
 app.config.globalProperties.$navigateTo = routerUtils.navigateTo;
@@ -157,9 +158,9 @@ if (pwaManager) {
 }
 
 // 确保加载正确的语言
-const savedLang = localStorage.getItem("language");
-if (savedLang && i18n.global.locale.value !== savedLang) {
-  i18n.global.locale.value = savedLang;
+const savedLang = useLocalStorage("language", i18n.global.locale.value);
+if (savedLang.value && i18n.global.locale.value !== savedLang.value) {
+  i18n.global.locale.value = savedLang.value;
 }
 
 // 挂载应用

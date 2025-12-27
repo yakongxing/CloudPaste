@@ -8,6 +8,7 @@ import ScreenCapture from "@uppy/screen-capture";
 import Audio from "@uppy/audio";
 import ImageEditor from "@uppy/image-editor";
 import UrlImportPlugin from "./plugins/UrlImportPlugin.js";
+import { useLocalStorage } from "@vueuse/core";
 
 /**
  * 插件管理器类
@@ -28,28 +29,35 @@ export class UppyPluginManager {
    * 从localStorage加载插件状态
    */
   loadPluginStates() {
-    const saved = localStorage.getItem("uppy-plugin-states");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.warn("Failed to parse saved plugin states:", e);
-      }
-    }
-    // 默认状态：摄像头和URL导入开启，其他关闭
-    return {
+    const defaultState = {
       webcam: true,
       screen: false,
       audio: false,
       urlImport: true,
     };
+
+    try {
+      this._storedPluginStates = useLocalStorage("uppy-plugin-states", defaultState);
+      const stored = this._storedPluginStates.value;
+      if (stored && typeof stored === "object") {
+        return { ...defaultState, ...stored };
+      }
+    } catch (e) {
+      console.warn("Failed to load plugin states:", e);
+    }
+    // 默认状态：摄像头和URL导入开启，其他关闭
+    return defaultState;
   }
 
   /**
    * 保存插件状态到localStorage
    */
   savePluginStates() {
-    localStorage.setItem("uppy-plugin-states", JSON.stringify(this.pluginStates));
+    try {
+      if (this._storedPluginStates) this._storedPluginStates.value = { ...(this.pluginStates || {}) };
+    } catch (e) {
+      console.warn("Failed to save plugin states:", e);
+    }
   }
 
   /**
