@@ -234,6 +234,14 @@ export async function uploadPartBytes({ signature, body, onComplete, size, onPro
 
     if (shouldSkip) {
       console.log("[StorageAdapter] skipUpload=true，跳过分片 PUT，直接进入 complete 阶段");
+      // 单文件预签名：把“本次上传没有 ETag”记回会话，供 commit 阶段兜底使用
+      try {
+        const fileId = signature && typeof signature.fileId === "string" ? signature.fileId : null;
+        if (fileId) {
+          const session = this.uploadSessions.get(fileId);
+          if (session) session.etag = null;
+        }
+      } catch {}
       try {
         onProgress?.({ loaded: size, total: size, lengthComputable: true });
       } catch {}
@@ -471,6 +479,14 @@ export async function uploadPartBytes({ signature, body, onComplete, size, onPro
               ),
             );
             return;
+          }
+
+          // 单文件预签名：把 ETag 写回 uploadSessions，commit 阶段优先取这里
+          if (partNumber == null && fileId) {
+            try {
+              const session = this.uploadSessions.get(fileId);
+              if (session) session.etag = etag;
+            } catch {}
           }
 
           // 将成功上传的分片写入 PartsLedger（用于：跳过重复 PUT、complete 时提交完整 parts）

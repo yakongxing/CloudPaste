@@ -380,7 +380,7 @@ export class StorageAdapter {
         failures.push({
           fileName: file.name,
           fileId: file.id,
-          error: error.message,
+          error: error instanceof Error ? error.message : String(error),
           timestamp: new Date().toISOString(),
         });
         return { file, success: false, error };
@@ -406,6 +406,101 @@ export class StorageAdapter {
       failureCount,
       totalCount: successfulFiles.length,
     };
+  }
+
+  /**
+   * 从 Uppy 的 response 里尽量提取 ETag
+   * - ETag 在后端 commit 阶段是可选的：拿不到也不要阻断上传完成
+   * @param {any} uploadResponse
+   * @returns {string|null}
+   */
+  _extractEtagFromUploadResponse(uploadResponse) {
+    try {
+      // 允许直接传字符串
+      if (typeof uploadResponse === "string") {
+        const s = uploadResponse.trim();
+        return s ? s : null;
+      }
+
+      const candidates = [
+        uploadResponse?.etag,
+        uploadResponse?.ETag,
+        uploadResponse?.headers?.etag,
+        uploadResponse?.headers?.ETag,
+        uploadResponse?.body?.etag,
+        uploadResponse?.body?.ETag,
+        uploadResponse?.body?.headers?.etag,
+        uploadResponse?.body?.headers?.ETag,
+      ];
+
+      for (const value of candidates) {
+        if (typeof value === "string") {
+          const s = value.trim();
+          if (s) return s;
+        }
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 预签名单文件上传（presigned-single）的 commit 阶段
+   * - 前端 PUT 直传完成后，还需要调用后端 /api/fs/presign/commit 做“登记/落库/刷新目录缓存”
+   * - HuggingFace LFS 场景：commit 需要 sha256（oid），ETag 不强依赖
+   * @param {Object} file Uppy file
+   * @param {any} uploadResponse Uppy file.response
+   */
+  async commitPresignedUpload(file, uploadResponse) {
+    const fileId = file?.id;
+    if (!fileId) {
+      throw new Error("提交预签名上传失败：缺少 file.id");
+    }
+
+    const session = this.uploadSessions.get(fileId);
+    if (!session) {
+      throw new Error("提交预签名上传失败：找不到上传会话信息（可能已被清理）");
+    }
+
+    const targetPath = session?.targetPath;
+    const mountId = session?.mountId;
+    if (!targetPath || !mountId) {
+      throw new Error("提交预签名上传失败：缺少 targetPath 或 mountId");
+    }
+
+    const contentType = session?.contentType || file?.type || "application/octet-stream";
+    const fileSize = Number(file?.size ?? 0);
+
+    // ETag：优先使用 uploadPartBytes 里缓存到 session 的值；再尝试从 uploadResponse 里解析；最后允许为空
+    let etag = null;
+    if (session?.skipUpload === true) {
+      etag = null;
+    } else if (typeof session?.etag === "string" && session.etag.trim()) {
+      etag = session.etag.trim();
+    } else {
+      etag = this._extractEtagFromUploadResponse(uploadResponse);
+    }
+
+    const uploadInfo = {
+      targetPath,
+      mountId,
+      storageConfigId: session?.storageConfigId ?? null,
+      fileId: session?.fileId ?? null,
+      storagePath: session?.storagePath ?? null,
+      sha256: session?.sha256 ?? null,
+    };
+
+    const response = await fsApi.commitPresignedUpload(uploadInfo, etag, contentType, fileSize);
+    if (!response?.success) {
+      throw new Error(response?.message || "提交预签名上传失败");
+    }
+
+    // commit 成功后清理会话
+    this.uploadSessions.delete(fileId);
+
+    return response?.data || response;
   }
 
   /**
@@ -540,6 +635,7 @@ export class StorageAdapter {
         fields: {},
         headers,
         skipUpload,
+        fileId: file.id,
       };
     } catch (error) {
       console.error("[StorageAdapter] 获取预签名URL上传参数失败:", error);
