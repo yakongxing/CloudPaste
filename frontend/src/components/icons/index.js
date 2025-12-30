@@ -116,6 +116,7 @@ import IconSyncSvg from '~icons/heroicons-outline/arrow-path'
 import IconPlaySvg from '~icons/heroicons-outline/play'
 import IconBanSvg from '~icons/heroicons-outline/ban'
 import IconBellSvg from '~icons/heroicons-outline/bell'
+import IconMegaphoneSvg from '~icons/heroicons-outline/megaphone'
 import IconQueueListSvg from '~icons/heroicons-outline/queue-list'
 
 // 书签和导航图标
@@ -415,6 +416,7 @@ export const IconSync = createIcon(IconSyncSvg)
 export const IconPlay = createIcon(IconPlaySvg)
 export const IconBan = createIcon(IconBanSvg)
 export const IconBell = createIcon(IconBellSvg)
+export const IconMegaphone = createIcon(IconMegaphoneSvg)
 export const IconQueueList = createIcon(IconQueueListSvg)
 export const IconX = createIcon(IconCloseSvg)
 
@@ -558,6 +560,7 @@ export default {
   IconPlay,
   IconBan,
   IconBell,
+  IconMegaphone,
   IconQueueList,
   IconX,
   IconBookmark,

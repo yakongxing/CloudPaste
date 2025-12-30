@@ -1414,7 +1414,13 @@ const handlePasswordError = ({ message }) => {
 };
 
 // 预览相关方法
+let lastPreviewLoadedKey = "";
 const handlePreviewLoaded = () => {
+  // 避免同一个文件在媒体事件重复触发时刷屏
+  const f = previewInfo.value || previewFile.value;
+  const key = f?.path || f?.name || "";
+  if (key && key === lastPreviewLoadedKey) return;
+  lastPreviewLoadedKey = key;
   console.log("预览加载完成");
 };
 
