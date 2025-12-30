@@ -6,318 +6,37 @@
 import { useAuthStore } from "@/stores/authStore.js";
 import * as fsApi from "@/api/services/fsService.js";
 import { API_BASE_URL } from "@/api/config.js";
+import { sha256HexFromBlob } from "@/utils/sha256.js";
+import { createPartsLedger, clearAllClientLedgers } from "./storage-adapter/multipart/partsLedger.js";
+import { SessionManager, AuthProvider, PathResolver, ErrorHandler } from "./storage-adapter/tools.js";
+import { createMultipartUpload as createMultipartUploadImpl } from "./storage-adapter/multipartCreate.js";
+import { signPart as signPartImpl, uploadPartBytes as uploadPartBytesImpl } from "./storage-adapter/multipartTransfer.js";
 
-function resolveAbsoluteApiUrl(url) {
-  const raw = String(url || "").trim();
-  if (!raw) return raw;
-  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
-  // 后端有些场景会直接返回以 /api/... 开头的路径（例如 /api/fs/multipart/upload-chunk）
-  if (raw.startsWith("/api/")) {
-    return `${API_BASE_URL}${raw}`;
-  }
-  // 兜底：保持相对路径，避免重复拼接 /api 前缀
-  return raw;
-}
-
-// ===== 内部工具类 =====
+// @uppy/aws-s3 的 getChunkSize() 回调拿到的是 file.data（Blob/File）
+// 需要一个 Blob -> fileId 的映射，才能从 blob 反查到 meta.cloudpasteMultipartChunkSize。
+const BLOB_FILE_ID_MAP_KEY = Symbol.for("cloudpaste.uppy.blobFileIdMap");
+const BLOB_FILE_ID_MAP_BOUND_KEY = Symbol.for("cloudpaste.uppy.blobFileIdMap.bound");
 
 /**
- * 缓存管理器 - 处理localStorage和内存缓存
+ * 分片上传（multipart）前端的两种模式（配合后端 driver 返回的 strategy）
+ *
+ * 1) per_part_url（前端直传到上游）
+ * - init：POST /api/fs/multipart/init → 返回 presignedUrls + partSize
+ * - upload：浏览器对每个 presignedUrl 做 PUT，成功后从响应头拿 ETag
+ * - complete：POST /api/fs/multipart/complete（把 parts[{PartNumber,ETag}] 交给后端）
+ * - 进度/账本：
+ *   - A（server_can_list，例如 S3）：服务端可从上游 ListParts 得到已上传分片
+ *   - B（client_keeps，例如 HuggingFace）：浏览器 localStorage 作为“续传真相源”，complete 时一次性提交完整 parts
+ *   - C（server_records，例如 Telegram）：分片经过后端，后端可以自己记录（需要的话写 DB）
+ *
+ * 2) single_session（前端切片 + 后端中转到上游）
+ * - init：POST /api/fs/multipart/init → 返回 session.uploadUrl（一般是 /api/fs/multipart/upload-chunk?upload_id=...）
+ * - upload：浏览器把每片 PUT 到 CloudPaste，后端转发到上游（Drive/OneDrive/Telegram 等）
+ * - 进度记录：后端天然知道进度（可以按需记录）
+ *
  */
-class CacheManager {
-  constructor(config) {
-    this.config = config;
-    this.memoryCache = new Map();
-    this.cacheHits = 0;
-    this.cacheMisses = 0;
-  }
 
-  getCachedParts(key) {
-    // 先检查内存缓存
-    if (this.memoryCache.has(key)) {
-      this.cacheHits++;
-      const cached = this.memoryCache.get(key);
-      if (Date.now() - cached.timestamp < this.config.cacheExpiry) {
-        return cached.parts;
-      } else {
-        this.memoryCache.delete(key);
-      }
-    }
-
-    // localStorage 缓存
-    this.cacheMisses++;
-    try {
-      const storageKey = this.config.storagePrefix + key;
-      const stored = localStorage.getItem(storageKey);
-      if (stored) {
-        const data = JSON.parse(stored);
-        const now = Date.now();
-        if (now - data.timestamp < this.config.cacheExpiry) {
-          // 更新内存缓存
-          this.memoryCache.set(key, data);
-          if (data.parts.length > 0) {
-            const partNumbers = data.parts.map((p) => p.PartNumber).sort((a, b) => a - b);
-            console.log(`[CacheManager] 缓存命中: [${partNumbers.join(", ")}] <- ${key}`);
-          }
-          return data.parts;
-        } else {
-          localStorage.removeItem(storageKey);
-          console.log(`[CacheManager] 缓存已过期，已清理: ${key}`);
-        }
-      }
-    } catch (error) {
-      console.error(`[CacheManager] 读取缓存失败: ${key}`, error);
-    }
-    return [];
-  }
-
-  setCachedParts(key, parts) {
-    const data = {
-      parts: parts,
-      timestamp: Date.now(),
-    };
-
-    try {
-      // 更新 localStorage
-      const storageKey = this.config.storagePrefix + key;
-      localStorage.setItem(storageKey, JSON.stringify(data));
-
-      // 更新内存缓存
-      this.memoryCache.set(key, data);
-
-      if (parts.length > 0) {
-        const partNumbers = parts.map((p) => p.PartNumber).sort((a, b) => a - b);
-        console.log(`[CacheManager] 缓存更新: [${partNumbers.join(", ")}] -> ${key}`);
-      }
-    } catch (error) {
-      console.error(`[CacheManager] 保存缓存失败: ${key}`, error);
-    }
-  }
-
-  addPartToCache(key, part) {
-    const existingParts = this.getCachedParts(key);
-    const updatedParts = [...existingParts];
-
-    // 检查是否已存在该分片
-    const existingIndex = updatedParts.findIndex((p) => p.PartNumber === part.PartNumber);
-    if (existingIndex >= 0) {
-      updatedParts[existingIndex] = part;
-    } else {
-      updatedParts.push(part);
-    }
-
-    this.setCachedParts(key, updatedParts);
-  }
-
-  getStats() {
-    return {
-      cacheHitRate: (this.cacheHits / (this.cacheHits + this.cacheMisses)) * 100,
-      memoryCacheSize: this.memoryCache.size,
-      cacheHits: this.cacheHits,
-      cacheMisses: this.cacheMisses,
-    };
-  }
-
-  clear() {
-    this.memoryCache.clear();
-    this.cacheHits = 0;
-    this.cacheMisses = 0;
-  }
-}
-
-/**
- * 会话管理器 - 处理上传会话的生命周期
- */
-class SessionManager {
-  constructor(config) {
-    this.config = config;
-    this.sessions = new Map();
-    this.pausedFiles = new Set();
-
-    // 定期清理过期会话
-    this.cleanupTimer = null;
-    const loop = () => {
-      try {
-        this.cleanupExpiredSessions();
-      } finally {
-        this.cleanupTimer = setTimeout(loop, 5 * 60 * 1000);
-      }
-    };
-    this.cleanupTimer = setTimeout(loop, 5 * 60 * 1000);
-  }
-
-  createSession(fileId, sessionData) {
-    const session = {
-      ...sessionData,
-      createdAt: Date.now(),
-      lastAccessAt: Date.now(),
-    };
-    this.sessions.set(fileId, session);
-    return session;
-  }
-
-  getSession(fileId) {
-    const session = this.sessions.get(fileId);
-    if (session) {
-      session.lastAccessAt = Date.now();
-    }
-    return session;
-  }
-
-  updateSession(fileId, updates) {
-    const session = this.sessions.get(fileId);
-    if (session) {
-      Object.assign(session, updates, { lastAccessAt: Date.now() });
-    }
-  }
-
-  deleteSession(fileId) {
-    return this.sessions.delete(fileId);
-  }
-
-  setFilePaused(fileId, paused) {
-    if (paused) {
-      this.pausedFiles.add(fileId);
-      console.log(`[SessionManager] 文件已暂停: ${fileId}`);
-    } else {
-      this.pausedFiles.delete(fileId);
-      console.log(`[SessionManager] 文件已恢复: ${fileId}`);
-    }
-  }
-
-  isFilePaused(fileId) {
-    return this.pausedFiles.has(fileId);
-  }
-
-  cleanupExpiredSessions() {
-    const now = Date.now();
-    let cleanedCount = 0;
-
-    for (const [fileId, session] of this.sessions) {
-      if (now - session.lastAccessAt > this.config.sessionTimeout) {
-        this.sessions.delete(fileId);
-        this.pausedFiles.delete(fileId);
-        cleanedCount++;
-      }
-    }
-
-    if (cleanedCount > 0) {
-      console.log(`[SessionManager] 清理了 ${cleanedCount} 个过期会话`);
-    }
-  }
-
-  getStats() {
-    return {
-      activeSessions: this.sessions.size,
-      pausedFiles: this.pausedFiles.size,
-    };
-  }
-
-  destroy() {
-    if (this.cleanupTimer) {
-      clearTimeout(this.cleanupTimer);
-      this.cleanupTimer = null;
-    }
-    this.sessions.clear();
-    this.pausedFiles.clear();
-  }
-}
-
-/**
- * 认证提供器 - 处理认证相关逻辑
- */
-class AuthProvider {
-  constructor(authStore) {
-    this.authStore = authStore;
-  }
-
-  getAuthHeaders() {
-    const headers = {};
-
-    // 检查管理员认证
-    if (this.authStore.authType === "admin" && this.authStore.adminToken) {
-      headers["Authorization"] = `Bearer ${this.authStore.adminToken}`;
-    }
-    // 检查API密钥/游客认证
-    else if (this.authStore.isKeyUser && this.authStore.apiKey) {
-      headers["Authorization"] = `ApiKey ${this.authStore.apiKey}`;
-    }
-
-    return headers;
-  }
-}
-
-/**
- * 路径解析器 - 处理路径转换逻辑
- */
-class PathResolver {
-  constructor(currentPath) {
-    this.currentPath = currentPath;
-  }
-
-  updatePath(newPath) {
-    this.currentPath = newPath;
-  }
-
-  buildFullPathFromKey(storageKey) {
-    // 如果storage key已经包含完整路径，直接返回
-    if (storageKey.startsWith("/")) {
-      return storageKey;
-    }
-
-    // 规范化当前路径，去掉末尾斜杠
-    const normalizedCurrentPath = this.currentPath.replace(/\/+$/, "");
-
-    // 提取文件名
-    const fileName = storageKey.split("/").pop();
-
-    // 构建完整路径
-    const result = `${normalizedCurrentPath}/${fileName}`;
-    console.log(`[PathResolver] 最终路径: ${result}`);
-
-    return result;
-  }
-}
-
-/**
- * 错误处理器 - 统一错误处理逻辑
- */
-class ErrorHandler {
-  constructor(config) {
-    this.config = config;
-  }
-
-  handleError(error, context, fallbackValue = null) {
-    const errorMessage = error?.message || "未知错误";
-    console.error(`[StorageAdapter] ${context}失败:`, errorMessage, error);
-
-    // 调用自定义错误处理器
-    if (this.config.onError && typeof this.config.onError === "function") {
-      this.config.onError(error, context);
-    }
-
-    return fallbackValue;
-  }
-
-  async retryOperation(operation, context = "操作") {
-    const maxRetries = this.config.maxRetries || 3;
-    const baseDelay = this.config.retryDelay || 1000;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await operation();
-      } catch (error) {
-        if (attempt === maxRetries) {
-          throw this.handleError(error, `${context}(最终尝试)`);
-        }
-
-        const delay = baseDelay * Math.pow(2, attempt - 1); // 指数退避
-        console.warn(`[ErrorHandler] ${context}失败，重试 ${attempt}/${maxRetries}，${delay}ms后重试:`, error.message);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
-    }
-  }
-}
+// ===== 内部工具类=====
 
 // ===== 主类 =====
 
@@ -331,6 +50,10 @@ export class StorageAdapter {
       maxRetries: options.maxRetries || 3,
       retryDelay: options.retryDelay || 1000,
       sessionTimeout: options.sessionTimeout || 60 * 60 * 1000, // 1小时
+      requireSha256ForPresign: options.requireSha256ForPresign === true,
+      // 分片预初始化：在真正开始上传前，先请求一次 /fs/multipart/init 拿到“真实 partSize”，
+      // 然后把 chunkSize 写入 file.meta，让 Uppy(AwsS3) 用正确的大小切片”。
+      enableMultipartPreinit: options.enableMultipartPreinit === true,
       onError: options.onError,
       ...options,
     };
@@ -338,10 +61,9 @@ export class StorageAdapter {
     // 基本属性
     this.currentPath = currentPath;
     this.uppyInstance = uppyInstance;
-    this.STORAGE_PREFIX = this.config.storagePrefix; // 保持向后兼容
+    this.STORAGE_PREFIX = this.config.storagePrefix;
 
     // 初始化内部模块
-    this.cacheManager = new CacheManager(this.config);
     this.sessionManager = new SessionManager(this.config);
     this.authProvider = new AuthProvider(useAuthStore());
     this.pathResolver = new PathResolver(currentPath);
@@ -351,6 +73,224 @@ export class StorageAdapter {
     this.uploadSessions = this.sessionManager.sessions;
     this.customPausedFiles = this.sessionManager.pausedFiles;
     this.authStore = this.authProvider.authStore;
+
+    // 可选：安装“分片预初始化”预处理器
+    this._multipartPreinitInstalled = false;
+    this._multipartPreinitCacheKey = "cloudpasteMultipartInit";
+    this._multipartChunkSizeKey = "cloudpasteMultipartChunkSize";
+    this._multipartPreinit = this._multipartPreinit.bind(this);
+    this._ensureBlobFileIdMap();
+    if (this.config.enableMultipartPreinit && this.uppyInstance) {
+      this.installMultipartPreinit();
+    }
+  }
+
+  /**
+   * 维护一个 Blob/File -> Uppy fileId 的 WeakMap
+   * - 解决 AwsS3.getChunkSize(blob) 无法直接拿到 file.meta 的问题
+   * - 这个映射挂在 uppyInstance 上，避免多个 StorageAdapter 重复绑定事件
+   */
+  _ensureBlobFileIdMap() {
+    const uppy = this.uppyInstance;
+    if (!uppy) return null;
+
+    if (!uppy[BLOB_FILE_ID_MAP_KEY]) {
+      uppy[BLOB_FILE_ID_MAP_KEY] = new WeakMap();
+    }
+    const map = uppy[BLOB_FILE_ID_MAP_KEY];
+
+    // 只绑定一次事件
+    if (!uppy[BLOB_FILE_ID_MAP_BOUND_KEY]) {
+      uppy[BLOB_FILE_ID_MAP_BOUND_KEY] = true;
+      uppy.on?.("file-added", (file) => {
+        try {
+          if (file?.data && typeof file.data === "object") {
+            map.set(file.data, file.id);
+          }
+        } catch {}
+      });
+      uppy.on?.("file-removed", (file) => {
+        try {
+          if (file?.data && typeof file.data === "object") {
+            map.delete(file.data);
+          }
+        } catch {}
+      });
+    }
+
+    // 兜底：如果 adapter 创建时 Uppy 已经有文件了，补一遍映射
+    try {
+      const files = typeof uppy.getFiles === "function" ? uppy.getFiles() : [];
+      for (const f of files) {
+        if (f?.data && typeof f.data === "object" && f?.id) {
+          map.set(f.data, f.id);
+        }
+      }
+    } catch {}
+
+    return map;
+  }
+
+  /**
+   * @uppy/aws-s3 的 getChunkSize(data) 使用：
+   * - data 是 Blob/File
+   * - 需要反查到 Uppy file，然后读 meta.cloudpasteMultipartChunkSize
+   * @param {any} data Blob/File
+   * @returns {number} chunkSize（字节）
+   */
+  getChunkSizeForAwsS3(data) {
+    try {
+      if (!data || typeof data !== "object") return this.config.partSize || 5 * 1024 * 1024;
+      const uppy = this.uppyInstance;
+      if (!uppy) return this.config.partSize || 5 * 1024 * 1024;
+
+      const map = uppy[BLOB_FILE_ID_MAP_KEY];
+      const fileId = map?.get?.(data);
+      if (!fileId) return this.config.partSize || 5 * 1024 * 1024;
+
+      const uppyFile = typeof uppy.getFile === "function" ? uppy.getFile(fileId) : null;
+      const n = Number(uppyFile?.meta?.[this._multipartChunkSizeKey]);
+      if (Number.isFinite(n) && n > 0) return Math.floor(n);
+
+      // 断点续传：优先使用服务器会话的 partSize（listUploads 返回 existingUpload）
+      const resumePartSize = Number(uppyFile?.meta?.existingUpload?.partSize);
+      if (Number.isFinite(resumePartSize) && resumePartSize > 0) {
+        return Math.floor(resumePartSize);
+      }
+
+      return this.config.partSize || 5 * 1024 * 1024;
+    } catch {
+      return this.config.partSize || 5 * 1024 * 1024;
+    }
+  }
+
+  /**
+   * 创建“分片账本”（PartsLedger）
+   * 统一管理已上传分片
+   */
+  _createPartsLedger(policy, storageKey) {
+    return createPartsLedger({
+      policy: policy || null,
+      storageKey,
+      storagePrefix: this.config.storagePrefix,
+      cacheExpiry: this.config.cacheExpiry,
+    });
+  }
+
+  /**
+   * 安装分片预初始化预处理器
+   * - 只在“前端直传分片（per_part_url）”模式下需要：S3/HuggingFace
+   * - 目的：提前拿到后端返回的 partSize，并写到 file.meta 上（再由 getChunkSizeForAwsS3(blob) 反查读取）
+   */
+  installMultipartPreinit() {
+    if (!this.uppyInstance || this._multipartPreinitInstalled) return;
+    try {
+      this.uppyInstance.addPreProcessor(this._multipartPreinit);
+      this._multipartPreinitInstalled = true;
+    } catch (e) {
+      console.warn("[StorageAdapter] 安装 multipart 预初始化预处理器失败（可忽略）:", e?.message || e);
+    }
+  }
+
+  /**
+   * 分片预初始化（Uppy preProcessor）
+   * - 在 AwsS3 构造 MultipartUploader 前执行
+   * - 写入 file.meta.cloudpasteMultipartInit + file.meta.cloudpasteMultipartChunkSize
+   */
+  async _multipartPreinit(fileIDs = []) {
+    if (!this.config.enableMultipartPreinit || !this.uppyInstance) return;
+
+    const promises = (fileIDs || []).map(async (fileID) => {
+      const file = this.uppyInstance.getFile(fileID);
+      if (!file) return;
+
+      // 只处理本地文件（remote 不走这里）
+      const blob = file?.data instanceof Blob ? file.data : null;
+      if (!blob) return;
+
+      const meta = file?.meta || {};
+
+      // 断点续传：如果 ServerResumePlugin 已经标记了 existingUpload，
+      // 把原会话的 partSize 写入 blob，让 Uppy 按同样大小切片即可。
+      if (meta?.resumable && meta?.existingUpload && meta?.serverResume) {
+        const existing = meta.existingUpload;
+        const existingPartSize = Number(existing?.partSize ?? existing?.part_size ?? 0);
+        if (Number.isFinite(existingPartSize) && existingPartSize > 0) {
+          try {
+            this.uppyInstance.setFileMeta(fileID, { [this._multipartChunkSizeKey]: Math.floor(existingPartSize) });
+          } catch {}
+        }
+        return;
+      }
+
+      const cached = meta?.[this._multipartPreinitCacheKey];
+      if (cached && typeof cached === "object" && cached.uploadId) {
+        const cachedSize = Number(cached.partSize || cached.part_size || meta?.[this._multipartChunkSizeKey] || 0);
+        if (Number.isFinite(cachedSize) && cachedSize > 0) {
+          try {
+            this.uppyInstance.setFileMeta(fileID, { [this._multipartChunkSizeKey]: Math.floor(cachedSize) });
+          } catch {}
+        }
+        return;
+      }
+
+      // 需要 sha256 的场景
+      let sha256 = null;
+      if (this.config.requireSha256ForPresign) {
+        if (typeof meta?.cloudpasteSha256 === "string" && meta.cloudpasteSha256) {
+          sha256 = meta.cloudpasteSha256;
+        } else if (typeof meta?.sha256 === "string" && meta.sha256) {
+          sha256 = meta.sha256;
+        } else {
+          throw new Error("分片上传预初始化失败：缺少 sha256（请先等待 SHA-256 计算完成）");
+        }
+        if (!sha256) {
+          throw new Error("分片上传预初始化失败：缺少 sha256（HuggingFace 需要先算 sha256 才能拿到分片URL）");
+        }
+      }
+
+      const initMessage = "初始化上传会话（获取分片参数）...";
+      try {
+        this.uppyInstance.emit("preprocess-progress", file, {
+          mode: "indeterminate",
+          message: initMessage,
+          value: 0,
+        });
+      } catch {}
+
+      let response;
+      try {
+        response = await fsApi.initMultipartUpload(
+          this.currentPath,
+          file.name,
+          file.size,
+          file.type,
+          this.config.partSize || 5 * 1024 * 1024,
+          sha256 ? { sha256 } : {},
+        );
+      } finally {
+        try {
+          this.uppyInstance.emit("preprocess-complete", file);
+        } catch {}
+      }
+
+      if (!response?.success) {
+        throw new Error(response?.message || "分片上传预初始化失败：initMultipartUpload 返回失败");
+      }
+
+      const init = response.data || {};
+      const chunkSize = Number(init.partSize || init.part_size || 0);
+      if (!Number.isFinite(chunkSize) || chunkSize <= 0) {
+        throw new Error("分片上传预初始化失败：后端没有返回有效的 partSize");
+      }
+
+      this.uppyInstance.setFileMeta(fileID, {
+        [this._multipartPreinitCacheKey]: init,
+        [this._multipartChunkSizeKey]: chunkSize,
+      });
+    });
+
+    await Promise.all(promises);
   }
 
   /**
@@ -359,6 +299,7 @@ export class StorageAdapter {
    */
   setUppyInstance(uppyInstance) {
     this.uppyInstance = uppyInstance;
+    this._ensureBlobFileIdMap();
   }
 
   /**
@@ -376,9 +317,28 @@ export class StorageAdapter {
    */
   getPerformanceStats() {
     return {
-      ...this.cacheManager.getStats(),
       ...this.sessionManager.getStats(),
     };
+  }
+
+  /**
+   * 获取某个文件的上传会话信息（用于 UI 提示 / commit 阶段 / 调试）。
+   * 注意：这里返回的是“本次上传流程”的会话，不代表存储侧的真实状态。
+   * @param {string} fileId
+   * @returns {any|null}
+   */
+  getUploadSession(fileId) {
+    return this.uploadSessions.get(fileId) || null;
+  }
+
+  /**
+   * 判断某个文件是否触发了“跳过上传”（例如：对象存储侧已存在内容，秒传/去重）。
+   * @param {string} fileId
+   * @returns {boolean}
+   */
+  isUploadSkipped(fileId) {
+    const session = this.getUploadSession(fileId);
+    return session?.skipUpload === true;
   }
 
   /**
@@ -395,7 +355,6 @@ export class StorageAdapter {
    */
   destroy() {
     this.sessionManager.destroy();
-    this.cacheManager.clear();
   }
 
   /**
@@ -474,117 +433,6 @@ export class StorageAdapter {
   }
 
   /**
-   * 从localStorage获取已上传分片信息
-   * @param {string} key storage key
-   * @returns {Array} 已上传分片列表
-   */
-  getUploadedPartsFromStorage(key) {
-    return this.cacheManager.getCachedParts(key);
-  }
-
-  /**
-   * 将已上传分片信息保存到localStorage
-   * @param {string} key storage key
-   * @param {Array} parts 已上传分片列表
-   */
-  saveUploadedPartsToStorage(key, parts) {
-    this.cacheManager.setCachedParts(key, parts);
-  }
-
-  /**
-   * 从localStorage删除已上传分片信息
-   * @param {string} key storage key
-   */
-  removeUploadedPartsFromStorage(key) {
-    try {
-      const storageKey = this.STORAGE_PREFIX + key;
-      localStorage.removeItem(storageKey);
-      console.log(`[StorageAdapter] 从localStorage删除分片缓存: ${key}`);
-    } catch (error) {
-      console.warn(`[StorageAdapter] 从localStorage删除失败:`, error);
-    }
-  }
-
-  /**
-   * 添加单个分片到localStorage缓存
-   * @param {string} key storage key
-   * @param {Object} part 分片信息 {PartNumber, ETag, Size}
-   */
-  addPartToStorage(key, part) {
-    this.cacheManager.addPartToCache(key, part);
-  }
-
-  /**
-   * 从服务器获取权威的已上传分片信息
-   * @param {string} key storage key
-   * @param {string} uploadId 上传ID
-   * @param {string} fileName 文件名
-   * @returns {Promise<Array>} 服务器端的权威分片列表
-   */
-  async getServerUploadedParts(key, uploadId, fileName) {
-    return this.errorHandler
-      .retryOperation(async () => {
-        // 将storage key转换为完整的挂载点路径
-        const fullPath = this.buildFullPathFromKey(key);
-        console.log(`[StorageAdapter] 从服务器获取分片信息: ${fullPath}`);
-
-        const response = await fsApi.listMultipartParts(fullPath, uploadId, fileName);
-
-        if (!response.success) {
-          throw new Error(`服务器分片查询失败: ${response.message}`);
-        }
-
-        const serverParts = (response.data.parts || []).map((part) => ({
-          PartNumber: part.partNumber,
-          ETag: part.etag,
-          Size: part.size,
-          LastModified: part.lastModified,
-        }));
-
-        console.log(`[StorageAdapter] 服务器返回${serverParts.length}个分片信息`);
-
-        // 更新localStorage缓存为服务器端数据
-        this.saveUploadedPartsToStorage(key, serverParts);
-
-        return serverParts;
-      }, "获取服务器分片信息")
-      .catch((error) => {
-        return this.errorHandler.handleError(error, "获取服务器分片信息", []);
-      });
-  }
-
-  /**
-   * 初始化已上传分片缓存（一次性从服务器获取数据）
-   * @param {string} key storage key
-   * @param {string} uploadId 上传ID
-   * @param {string} fileName 文件名
-   */
-  async initializeUploadedPartsCache(key, uploadId, fileName) {
-    try {
-      console.log(`[StorageAdapter] 初始化分片缓存: ${key}`);
-
-      // 从服务器获取权威的已上传分片信息
-      const serverParts = await this.getServerUploadedParts(key, uploadId, fileName);
-
-      console.log(`[StorageAdapter] 缓存初始化完成，后续uploadPartBytes将直接使用缓存`);
-      return serverParts;
-    } catch (error) {
-      console.error(`[StorageAdapter] 初始化分片缓存失败:`, error);
-      // 失败时初始化为空缓存
-      this.saveUploadedPartsToStorage(key, []);
-      return [];
-    }
-  }
-
-  /**
-   * 更新当前路径
-   * @param {string} newPath 新路径
-   */
-  updatePath(newPath) {
-    this.currentPath = newPath;
-  }
-
-  /**
    * 获取认证头部 - 用于XHR Upload插件
    * @returns {Object} 认证头部对象
    */
@@ -602,13 +450,55 @@ export class StorageAdapter {
     try {
       console.log(`[StorageAdapter] 获取预签名URL上传参数: ${file.name}`);
 
-      const response = await fsApi.getPresignedUploadUrl(this.currentPath, file.name, file.type, file.size);
+      const requireSha256ForPresign = this.config.requireSha256ForPresign === true;
+      const blob = file?.data instanceof Blob ? file.data : null;
+      const metaSha256 =
+        (typeof file?.meta?.cloudpasteSha256 === "string" && file.meta.cloudpasteSha256) ||
+        (typeof file?.meta?.sha256 === "string" && file.meta.sha256) ||
+        null;
+      // sha256 取值顺序：
+      // 1) Uppy preprocess 写入的 file.meta.cloudpasteSha256（最推荐）
+      // 2) 兜底：本次直接用 blob 现算一次
+      let sha256 = null;
+      if (requireSha256ForPresign) {
+        if (typeof metaSha256 === "string" && metaSha256) {
+          sha256 = metaSha256;
+        } else if (blob) {
+          sha256 = await sha256HexFromBlob(blob);
+        }
+        if (!sha256) {
+          throw new Error("预签名上传需要 sha256，但当前文件无法计算 sha256（请重试或换一种上传方式）");
+        }
+      }
+
+      const response = await fsApi.getPresignedUploadUrl(
+        this.currentPath,
+        file.name,
+        file.type,
+        file.size,
+        sha256,
+      );
 
       if (!response.success) {
         throw new Error(response.message || "获取预签名URL失败");
       }
 
       const data = response.data || {};
+
+      // 对“需要 sha256 的预签名上传”，后端必须回传 sha256（便于 commit 阶段对齐）
+      if (requireSha256ForPresign && (!data.sha256 || typeof data.sha256 !== "string")) {
+        throw new Error("预签名上传失败：后端没有返回 sha256（无法进入 commit 阶段）");
+      }
+
+      // 统一一次 sha256 的“最终值”（用于 commit / UI 展示）
+      let canonicalSha256 = null;
+      if (typeof data.sha256 === "string" && data.sha256) {
+        canonicalSha256 = data.sha256;
+      } else if (typeof sha256 === "string" && sha256) {
+        canonicalSha256 = sha256;
+      } else if (typeof metaSha256 === "string" && metaSha256) {
+        canonicalSha256 = metaSha256;
+      }
 
       // 缓存上传信息，供commit使用
       this.uploadSessions.set(file.id, {
@@ -620,7 +510,16 @@ export class StorageAdapter {
         storageConfigId: data.storageConfigId,
         contentType: data.contentType,
         storageType: data.storageType || data.storage_type || null,
+        sha256: canonicalSha256,
+        skipUpload: data.skipUpload === true,
       });
+
+      // 用于 UI 在上传完成后统计“跳过上传（秒传/去重）”数量
+      try {
+        if (this.uppyInstance) {
+          this.uppyInstance.setFileMeta(file.id, { cloudpasteSkipUpload: data.skipUpload === true });
+        }
+      } catch {}
 
       const baseHeaders = data.headers || {};
       const headers = {
@@ -628,11 +527,19 @@ export class StorageAdapter {
         ...baseHeaders,
       };
 
+      const skipUpload = data.skipUpload === true;
+
+      // HuggingFace LFS “去重”场景：上游可能不给 uploadUrl（表示对象已存在，无需再次上传）
+      if (skipUpload) {
+        headers["x-cloudpaste-skip-upload"] = "1";
+      }
+
       return {
         method: "PUT",
-        url: data.presignedUrl,
+        url: skipUpload ? `${API_BASE_URL}/__uppy_skip_upload__` : data.presignedUrl,
         fields: {},
         headers,
+        skipUpload,
       };
     } catch (error) {
       console.error("[StorageAdapter] 获取预签名URL上传参数失败:", error);
@@ -646,286 +553,7 @@ export class StorageAdapter {
    * @returns {Promise<Object>} {uploadId, key}
    */
   async createMultipartUpload(file) {
-    try {
-      console.log(`[StorageAdapter] 创建分片上传: ${file.name}`);
-
-      // 检查是否为ServerResume标记的可恢复上传
-      if (file.meta.resumable && file.meta.existingUpload && file.meta.serverResume) {
-        const existingUpload = file.meta.existingUpload;
-        console.log(
-          `[StorageAdapter] 尝试恢复现有上传: uploadId=${existingUpload.uploadId}, key=${existingUpload.key}`,
-        );
-
-        const existingStrategy = existingUpload.strategy || "per_part_url";
-
-        try {
-          // 1. 先验证uploadId有效性 - 使用完整的挂载点路径
-          const fullPathForValidation = this.buildFullPathFromKey(existingUpload.key);
-          console.log(`[StorageAdapter] 验证uploadId有效性: ${fullPathForValidation}`);
-          const listPartsResponse = await fsApi.listMultipartParts(
-            fullPathForValidation,
-            existingUpload.uploadId,
-            file.name,
-          );
-
-          if (!listPartsResponse.success) {
-            throw new Error(`uploadId已失效: ${listPartsResponse.message}`);
-          }
-
-          const uploadedParts = listPartsResponse.data.parts || [];
-          console.log(
-            `[StorageAdapter] 🔍 服务器返回: 找到${uploadedParts.length}个已上传分片（按驱动语义解析）`,
-          );
-
-          // per_part_url 策略（S3 等）：保持原有的预签名URL刷新与本地缓存逻辑
-          if (existingStrategy === "per_part_url") {
-            const partSize = this.config.partSize || 5 * 1024 * 1024;
-            const totalParts = Math.ceil(file.size / partSize);
-            const partNumbers = Array.from({ length: totalParts }, (_, i) => i + 1);
-
-            const fullPath = this.buildFullPathFromKey(existingUpload.key);
-            console.log(
-              `[StorageAdapter] 路径转换: StorageKey=${existingUpload.key} -> FullPath=${fullPath}`,
-            );
-
-            const refreshResponse = await fsApi.refreshMultipartUrls(
-              fullPath,
-              existingUpload.uploadId,
-              partNumbers,
-            );
-
-            if (!refreshResponse.success) {
-              throw new Error(refreshResponse.message || "刷新预签名URL失败");
-            }
-
-            const standardParts = uploadedParts.map((part) => ({
-              PartNumber: part.partNumber,
-              Size: part.size,
-              ETag: part.etag,
-            }));
-
-            const uploadedBytes = uploadedParts.reduce((sum, part) => sum + part.size, 0);
-            const progressPercent = Math.round((uploadedBytes / file.size) * 100);
-
-            if (standardParts.length > 0) {
-              const partNums = standardParts
-                .map((p) => p.PartNumber)
-                .sort((a, b) => a - b);
-              console.log(
-                `[StorageAdapter] 服务器已上传分片: [${partNums.join(", ")}] (${progressPercent}%)`,
-              );
-            }
-
-            this.uploadSessions.set(file.id, {
-              strategy: "per_part_url",
-              uploadId: existingUpload.uploadId,
-              key: existingUpload.key,
-              presignedUrls: refreshResponse.data.presignedUrls,
-              path: this.currentPath,
-              fileName: file.name,
-              resumed: true, // 标记为恢复的上传
-            });
-
-            const fullPathKey = this.buildFullPathFromKey(existingUpload.key);
-            this.saveUploadedPartsToStorage(fullPathKey, standardParts);
-            console.log(
-              `[StorageAdapter] 缓存到localStorage: ${standardParts.length}个分片 -> ${fullPathKey}`,
-            );
-
-            console.log("[StorageAdapter] per_part_url 模式断点续传恢复成功");
-            return {
-              uploadId: existingUpload.uploadId,
-              key: existingUpload.key,
-            };
-          }
-
-          // single_session 策略（OneDrive 等）：使用单一 uploadUrl + Content-Range
-          if (existingStrategy === "single_session") {
-            const fullPath = this.buildFullPathFromKey(existingUpload.key);
-            console.log(
-              `[StorageAdapter] single_session 恢复: StorageKey=${existingUpload.key} -> FullPath=${fullPath}`,
-            );
-
-            // 对于 single_session，后端的 refreshMultipartUrls 返回最新的会话信息
-            const refreshResponse = await fsApi.refreshMultipartUrls(
-              fullPath,
-              existingUpload.uploadId,
-              [1], // 对于 single_session，partNumbers 仅为参数校验占位
-            );
-
-            if (!refreshResponse.success) {
-              throw new Error(refreshResponse.message || "刷新会话信息失败");
-            }
-
-            const data = refreshResponse.data || {};
-            const session = data.session || {};
-            const uploadUrl = session.uploadUrl || existingUpload.uploadId;
-            const nextExpectedRanges = session.nextExpectedRanges || [];
-
-            let resumeOffset = 0;
-            if (Array.isArray(nextExpectedRanges) && nextExpectedRanges.length > 0) {
-              const firstRange = String(nextExpectedRanges[0]);
-              const startStr = firstRange.split("-")[0];
-              const parsed = Number.parseInt(startStr, 10);
-              if (Number.isFinite(parsed) && parsed >= 0) {
-                resumeOffset = parsed;
-              }
-            }
-
-            const effectivePartSize =
-              existingUpload.partSize || this.config.partSize || 5 * 1024 * 1024;
-
-            // 结合服务器返回的已上传分片列表，推导已完成的分片数量
-            // 从1开始连续编号，如果出现空洞则只取最大连续分片号
-            let completedParts = 0;
-            if (Array.isArray(uploadedParts) && uploadedParts.length > 0) {
-              const partNumbers = uploadedParts
-                .map((p) => p.partNumber ?? p.PartNumber)
-                .filter((n) => typeof n === "number" && Number.isFinite(n) && n > 0)
-                .sort((a, b) => a - b);
-
-              let expected = 1;
-              for (const n of partNumbers) {
-                if (n === expected) {
-                  completedParts = n;
-                  expected += 1;
-                } else {
-                  break;
-                }
-              }
-            }
-
-            this.uploadSessions.set(file.id, {
-              strategy: "single_session",
-              uploadId: existingUpload.uploadId,
-              key: existingUpload.key,
-              session: {
-                uploadUrl,
-                nextExpectedRanges,
-              },
-              path: this.currentPath,
-              fileName: file.name,
-              fileSize: file.size,
-              partSize: effectivePartSize,
-              resumed: true,
-              resumeOffset,
-              completedParts,
-            });
-
-            console.log(
-              `[StorageAdapter] single_session 模式断点续传恢复成功，resumeOffset=${resumeOffset}，completedParts=${completedParts}`,
-            );
-
-            return {
-              uploadId: existingUpload.uploadId,
-              key: existingUpload.key,
-            };
-          }
-
-          console.warn(
-            `[StorageAdapter] 未知的 existingUpload.strategy=${existingStrategy}，将回退为全新上传`,
-          );
-        } catch (error) {
-          console.warn(`[StorageAdapter] 断点续传失败，创建新上传: ${error.message}`);
-
-          // 清除失效的上传标记
-          if (this.uppyInstance) {
-            this.uppyInstance.setFileMeta(file.id, {
-              resumable: false,
-              existingUpload: null,
-              serverResume: false,
-            });
-          }
-
-          // 继续创建新的上传（不要递归调用，直接继续执行下面的代码）
-        }
-      }
-
-      // 创建新的分片上传（统一走 FS /fs/multipart/init，依据 strategy 分流）
-      const partSize = this.config.partSize || 5 * 1024 * 1024; // 5MB
-      const response = await fsApi.initMultipartUpload(
-        this.currentPath,
-        file.name,
-        file.size,
-        file.type,
-        partSize,
-      );
-
-      if (!response.success) {
-        throw new Error(response.message || "初始化分片上传失败");
-      }
-
-      const init = response.data || {};
-      const strategy = init.strategy || "per_part_url";
-      const uploadId = init.uploadId;
-      const key = `${this.currentPath}/${file.name}`.replace(/\/+/g, "/");
-
-      if (!uploadId) {
-        throw new Error("初始化分片上传失败：缺少 uploadId");
-      }
-
-      if (strategy === "per_part_url") {
-        // S3 等 per-part 预签名 URL 策略
-        if (!Array.isArray(init.presignedUrls) || init.presignedUrls.length === 0) {
-          throw new Error("初始化分片上传失败：per_part_url 策略缺少 presignedUrls");
-        }
-
-        this.uploadSessions.set(file.id, {
-          strategy,
-          uploadId,
-          key,
-          presignedUrls: init.presignedUrls,
-          path: this.currentPath,
-          fileName: file.name,
-          fileSize: file.size,
-          partSize: init.partSize || partSize,
-          resumed: false,
-        });
-
-        // 对于新上传，也检查一次服务器是否有已上传分片（可能是其他会话的残留）
-        const fullPathKey = this.buildFullPathFromKey(key);
-        await this.initializeUploadedPartsCache(fullPathKey, uploadId, file.name);
-        console.log(`[StorageAdapter] 新上传初始化完成，已检查服务器状态，缓存key=${fullPathKey}`);
-
-        return {
-          uploadId,
-          key,
-        };
-      }
-
-      if (strategy === "single_session") {
-        // OneDrive 等使用单一 uploadUrl + Content-Range 的策略
-        const session = init.session || {};
-        if (!session.uploadUrl) {
-          throw new Error("初始化分片上传失败：single_session 策略缺少 session.uploadUrl");
-        }
-
-        this.uploadSessions.set(file.id, {
-          strategy,
-          uploadId,
-          key,
-          session,
-          path: this.currentPath,
-          fileName: file.name,
-          fileSize: file.size,
-          partSize: init.partSize || partSize,
-          resumed: false,
-          resumeOffset: 0,
-        });
-
-        console.log("[StorageAdapter] 新的 single_session 分片上传会话已创建（OneDrive/Graph 模式）");
-
-        return {
-          uploadId,
-          key,
-        };
-      }
-
-      throw new Error(`不支持的分片上传策略: ${String(strategy)}`);
-    } catch (error) {
-      console.error("[StorageAdapter] 创建分片上传失败:", error);
-      throw error;
-    }
+    return createMultipartUploadImpl.call(this, file);
   }
 
   /**
@@ -935,89 +563,7 @@ export class StorageAdapter {
    * @returns {Promise<Object>} {url, headers}
    */
   async signPart(file, partData) {
-    try {
-      const session = this.uploadSessions.get(file.id);
-      if (!session) {
-        throw new Error("找不到上传会话信息");
-      }
-
-      console.log(`[StorageAdapter] signPart被调用: 分片${partData.partNumber}`);
-
-      // 不在signPart中处理已上传分片，断点续传由 listParts + uploadPartBytes 内部处理
-
-      if (session.strategy === "single_session") {
-        // OneDrive/Graph uploadSession: 所有分片共用一个 uploadUrl，通过 Content-Range 标记区间
-        // 这里不使用 resumeOffset，而是始终按全局 partNumber 计算 Range:
-        // start = (partNumber - 1) * partSize
-        // 已上传的分片通过 listParts 返回的 PartNumber 列表由 HTTPCommunicationQueue 跳过。
-        const totalSize = session.fileSize || file.size;
-        const partSize = session.partSize || this.config.partSize || 5 * 1024 * 1024;
-
-        const partNumber = partData.partNumber;
-        if (typeof partNumber !== "number" || !Number.isFinite(partNumber) || partNumber <= 0) {
-          throw new Error(`无效的单会话分片编号: ${partNumber}`);
-        }
-
-        const body = partData.body;
-        const currentSize =
-          (body && (body.size ?? body.byteLength)) != null
-            ? body.size ?? body.byteLength
-            : null;
-        if (currentSize == null || !Number.isFinite(currentSize) || currentSize <= 0) {
-          throw new Error("无法确定当前分片大小，用于计算 Content-Range");
-        }
-
-        const start = (partNumber - 1) * partSize;
-        const end = Math.min(start + currentSize, totalSize) - 1;
-
-        if (start >= totalSize) {
-          throw new Error(
-            `分片区间超出文件大小: start=${start}, totalSize=${totalSize}, partNumber=${partNumber}`,
-          );
-        }
-
-        const urlRaw = session.session?.uploadUrl || session.uploadId;
-        const url = resolveAbsoluteApiUrl(urlRaw);
-        if (!url) {
-          throw new Error("single_session 会话缺少有效的 uploadUrl");
-        }
-
-        // 对于 single_session（OneDrive / GoogleDrive 后端中转），需要带上认证头，
-        const authHeaders = this.authProvider.getAuthHeaders() || {};
-
-        return {
-          url,
-          headers: {
-            ...authHeaders,
-            "Content-Type": "application/octet-stream",
-            "Content-Range": `bytes ${start}-${end}/${totalSize}`,
-          },
-          strategy: "single_session",
-          partNumber,
-          fileId: file.id,
-          key: session.key || null,
-        };
-      }
-
-      // 默认 per_part_url 策略（S3 等）：从缓存的预签名URL列表中找到对应分片
-      const urls = Array.isArray(session.presignedUrls) ? session.presignedUrls : [];
-      const urlInfo = urls.find((url) => url.partNumber === partData.partNumber);
-
-      if (!urlInfo) {
-        throw new Error(`找不到分片 ${partData.partNumber} 的预签名URL`);
-      }
-
-      return {
-        url: urlInfo.url,
-        headers: {
-          "Content-Type": "application/octet-stream",
-        },
-        strategy: "per_part_url",
-      };
-    } catch (error) {
-      console.error("[StorageAdapter] 签名分片失败:", error);
-      throw error;
-    }
+    return signPartImpl.call(this, file, partData);
   }
 
   /**
@@ -1035,13 +581,51 @@ export class StorageAdapter {
         throw new Error("找不到上传会话信息");
       }
 
-      // 检查Uppy传递的parts格式
-      if (!data.parts || !Array.isArray(data.parts)) {
-        throw new Error("无效的parts数据");
+      const incomingParts = Array.isArray(data?.parts) ? data.parts : [];
+      let partsToSend = incomingParts;
+
+      // HuggingFace LFS 去重：skipUpload=true 表示对象已存在，不需要真实上传，也不需要 ETag。
+      // 后端会基于 session.provider_meta.skipUpload 跳过 multipart completion，只做 lfsFile commit 并标记会话 completed。
+      if (session?.skipUpload === true) {
+        partsToSend = [];
       }
 
-      // Uppy内部使用AWS标准格式，直接传递即可
-      const response = await fsApi.completeMultipartUpload(session.path, data.uploadId, data.parts, session.fileName, file.size);
+      // per_part_url：complete 必须提交完整 parts（PartNumber + ETag）。
+      // - client_keeps：刷新页面后 Uppy 只知道“本次页面上传的 parts”，必须和本地账本合并
+      // - server_can_list：断点续传时 Uppy 也可能只带“本次页面上传的 parts”，需要合并“恢复时已存在的分片”
+      try {
+        if (session?.skipUpload !== true && session?.key) {
+          const storageKey = String(session.key || "").replace(/^\/+/, "");
+          const partsLedger =
+            session?.partsLedger || this._createPartsLedger(session?.policy || null, storageKey);
+          if (!session.partsLedger) session.partsLedger = partsLedger;
+          try {
+            await partsLedger.load?.();
+          } catch {}
+
+          const mergedAll = partsLedger.mergeIncomingParts(incomingParts);
+          const completeParts = (Array.isArray(mergedAll) ? mergedAll : [])
+            .filter((p) => typeof p?.ETag === "string" && p.ETag.length > 0)
+            .map((p) => ({ PartNumber: Number(p.PartNumber), ETag: p.ETag }))
+            .filter((p) => Number.isFinite(p.PartNumber) && p.PartNumber > 0);
+
+          if (completeParts.length > 0) {
+            partsToSend = completeParts;
+          } else if (Array.isArray(mergedAll) && mergedAll.length > 0) {
+            throw new Error("完成分片上传失败：本地账本里缺少 ETag（请重试或重新开始上传）");
+          }
+        }
+      } catch (e) {
+        throw e;
+      }
+
+      const response = await fsApi.completeMultipartUpload(
+        session.path,
+        data.uploadId,
+        partsToSend,
+        session.fileName,
+        file.size,
+      );
 
       if (!response.success) {
         throw new Error(response.message || "完成分片上传失败");
@@ -1049,10 +633,9 @@ export class StorageAdapter {
 
       // 清理上传会话和分片缓存
       this.uploadSessions.delete(file.id);
-      if (session.key) {
-        const fullPathKey = this.buildFullPathFromKey(session.key);
-        this.removeUploadedPartsFromStorage(fullPathKey);
-      }
+      try {
+        session?.partsLedger?.clearPersistent?.();
+      } catch {}
 
       return {
         location: response.data.url || `${session.path}/${session.fileName}`,
@@ -1077,10 +660,9 @@ export class StorageAdapter {
         await fsApi.abortMultipartUpload(session.path, data.uploadId, session.fileName);
         // 清理上传会话和分片缓存
         this.uploadSessions.delete(file.id);
-        if (session.key) {
-          const fullPathKey = this.buildFullPathFromKey(session.key);
-          this.removeUploadedPartsFromStorage(fullPathKey);
-        }
+        try {
+          session?.partsLedger?.clearPersistent?.();
+        } catch {}
       }
     } catch (error) {
       console.error("[StorageAdapter] 中止分片上传失败:", error);
@@ -1099,23 +681,55 @@ export class StorageAdapter {
     try {
       console.log(`[StorageAdapter] listParts被调用: ${file.name}, uploadId: ${uploadId}, key: ${key}`);
 
-      // 始终以服务器返回的状态为准，localStorage 仅作为加速缓存
+      // key 是 storageKey（无前导 /），API 的 path 是 fsPath（以 / 开头）
+      const storageKey = String(key || "").replace(/^\/+/, "");
+      const fsPath = this.buildFullPathFromKey(storageKey);
+
+      const session = this.uploadSessions.get(file.id) || null;
+      const basePolicy = session?.policy || null;
+
+      // client_keeps 会持久化；其它只用内存（避免 S3 写 localStorage）
+      let partsLedger = session?.partsLedger || this._createPartsLedger(basePolicy, storageKey);
+      if (session && !session.partsLedger) session.partsLedger = partsLedger;
+      try {
+        await partsLedger.load?.();
+      } catch {}
+
+      // client_keeps：服务端 list-parts 永远是空，直接信本地账本
+      if (partsLedger.ledgerPolicy === "client_keeps") {
+        const cached = partsLedger.toAwsPartsArray();
+        console.log(`[StorageAdapter] client_keeps：使用本地账本（${cached.length}片）`);
+        return cached;
+      }
+
       console.log(`[StorageAdapter] 回源查询服务器 listMultipartParts`);
-      const response = await fsApi.listMultipartParts(key, uploadId, file.name);
+      const response = await fsApi.listMultipartParts(fsPath, uploadId, file.name);
       if (!response?.success) {
         throw new Error(response?.message || "listMultipartParts 失败");
       }
 
-      const serverParts = (response.data?.parts || []).map((part) => ({
-        PartNumber: part.partNumber ?? part.PartNumber,
-        ETag: part.etag ?? part.ETag,
-        Size: part.size ?? part.Size ?? 0,
-      }));
+      // 服务端回传 policy 时：如果是 client_keeps，就切换到本地账本
+      const policyFromServer = response?.data?.policy || null;
+      const ledgerPolicyFromServerRaw =
+        policyFromServer?.partsLedgerPolicy ?? policyFromServer?.parts_ledger_policy ?? null;
+      const ledgerPolicyFromServer = String(ledgerPolicyFromServerRaw || "");
 
-      // 将服务器状态写入本地缓存，后续 per_part_url 跳过逻辑可以复用
-      this.saveUploadedPartsToStorage(key, serverParts);
-      console.log(`[StorageAdapter] 服务器返回${serverParts.length}个分片，并已写入缓存`);
-      return serverParts;
+      if (ledgerPolicyFromServer === "client_keeps") {
+        partsLedger = this._createPartsLedger(policyFromServer, storageKey);
+        try {
+          await partsLedger.load?.();
+        } catch {}
+        if (session) session.partsLedger = partsLedger;
+        const cached = partsLedger.toAwsPartsArray();
+        console.log(`[StorageAdapter] client_keeps：服务端标记后切换到本地账本（${cached.length}片）`);
+        return cached;
+      }
+
+      const serverParts = Array.isArray(response?.data?.parts) ? response.data.parts : [];
+      partsLedger.replaceAll(serverParts);
+      const normalized = partsLedger.toAwsPartsArray();
+      console.log(`[StorageAdapter] 服务器返回${normalized.length}个分片（已写入内存账本）`);
+      return normalized;
     } catch (error) {
       console.error("[StorageAdapter] listParts失败:", error);
       return [];
@@ -1129,468 +743,20 @@ export class StorageAdapter {
    * @returns {Promise<Object>} {ETag}
    */
   async uploadPartBytes({ signature, body, onComplete, size, onProgress, signal }) {
-    try {
-      const { url, headers } = signature;
-
-      if (!url) {
-        throw new Error("Cannot upload to an undefined URL");
-      }
-
-      console.log(`[StorageAdapter] uploadPartBytes被调用: ${url}`);
-
-      const isSingleSession = signature && signature.strategy === "single_session";
-      const signatureKey =
-        signature && typeof signature.key === "string" && signature.key ? signature.key : null;
-
-      // 初始从签名中获取分片编号和文件ID（single_session 会显式传递）
-      let partNumber = signature && typeof signature.partNumber === "number"
-        ? signature.partNumber
-        : null;
-      let fileId = signature && typeof signature.fileId === "string" ? signature.fileId : null;
-
-      // 解析URL获取key和partNumber（仅对 per_part_url 模式有意义）
-      let key = null;
-      try {
-        const urlObject = new URL(url);
-        const pathParts = urlObject.pathname.split("/");
-        const storageKey = pathParts.slice(1).join("/"); // 去掉第一个空字符串，获取完整路径
-        const partNumberRaw = urlObject.searchParams.get("partNumber");
-        if (partNumber == null) {
-          partNumber =
-            partNumberRaw != null && partNumberRaw !== ""
-              ? parseInt(partNumberRaw, 10)
-              : null;
-        }
-        if (storageKey) {
-          key = this.buildFullPathFromKey(storageKey);
-        }
-      } catch {
-        // 非 S3 预签名 URL（例如 OneDrive uploadSession），不进行 key/partNumber 解析
-        key = null;
-      }
-
-      if (partNumber != null) {
-        console.log(`[StorageAdapter] 🔄 处理分片${partNumber}上传...`);
-      }
-
-      // 基于 listParts 回源结果（写入 localStorage）的“已存在分片跳过”：
-      if (signatureKey && partNumber != null) {
-        const cachedParts = this.getUploadedPartsFromStorage(signatureKey);
-        const existingPart = cachedParts.find((part) => part.PartNumber === partNumber);
-        if (existingPart) {
-          console.log(
-            `[StorageAdapter] ✅ 分片${partNumber}已在服务器存在（缓存命中），跳过上传 (ETag: ${existingPart.ETag})`,
-          );
-
-          return new Promise((resolve) => {
-            setTimeout(() => {
-              try {
-                onProgress(size);
-              } catch {}
-              try {
-                onComplete(existingPart.ETag);
-              } catch {}
-              resolve({ ETag: existingPart.ETag });
-            }, 0);
-          });
-        }
-      }
-
-      // 针对 single_session（OneDrive 等）执行基于会话状态的跳过逻辑
-      if (isSingleSession) {
-        const session = fileId ? this.uploadSessions.get(fileId) : null;
-        if (
-          session &&
-          typeof session.completedParts === "number" &&
-          session.completedParts > 0 &&
-          partNumber != null &&
-          partNumber <= session.completedParts
-        ) {
-          console.log(
-            `[StorageAdapter] ✅ single_session 分片${partNumber}已完成，跳过上传（逻辑跳过，不发HTTP请求）`,
-          );
-
-          // 模拟一个瞬间完成的上传过程，保持与实际上传一致的回调行为
-          return new Promise((resolve) => {
-            setTimeout(() => {
-              try {
-                onProgress(size);
-              } catch {}
-              const etag = `onedrive-part-${partNumber}`;
-              try {
-                onComplete(etag);
-              } catch {}
-              resolve({ ETag: etag });
-            }, 0);
-          });
-        }
-      }
-
-      // 针对 per_part_url（S3 等）执行本地缓存与跳过逻辑；single_session 模式不会进入该分支
-      if (!isSingleSession && key && partNumber != null) {
-        const cachedParts = this.getUploadedPartsFromStorage(key);
-        const existingPart = cachedParts.find((part) => part.PartNumber === partNumber);
-
-        if (existingPart) {
-          console.log(
-            `[StorageAdapter] ✅ 分片${partNumber}已缓存，跳过上传 (ETag: ${existingPart.ETag})`,
-          );
-
-          // 模拟一个瞬间完成的上传过程，而不是直接跳过
-          return new Promise((resolve) => {
-            setTimeout(() => {
-              try {
-                onProgress(size);
-              } catch {}
-              try {
-                onComplete(existingPart.ETag);
-              } catch {}
-              resolve({ ETag: existingPart.ETag });
-            }, 0);
-          });
-        }
-
-        // 检查文件是否被自定义暂停（同样仅在 per_part_url 模式下有效）
-        const fileId = this.getFileIdFromUrl(url);
-        if (fileId && this.isFilePaused(fileId)) {
-          console.log(`[StorageAdapter] ⏸️ 分片${partNumber}被暂停，等待恢复...`);
-
-          // 返回一个等待恢复的Promise
-          return new Promise((resolve, reject) => {
-            let resumeTimer = null;
-            const checkResume = () => {
-              if (!this.isFilePaused(fileId)) {
-                if (resumeTimer) {
-                  clearTimeout(resumeTimer);
-                  resumeTimer = null;
-                }
-                console.log(`[StorageAdapter] ▶️ 分片${partNumber}恢复上传`);
-                this.uploadPartBytes({
-                  signature,
-                  body,
-                  onComplete,
-                  size,
-                  onProgress,
-                  signal,
-                })
-                  .then(resolve)
-                  .catch(reject);
-                return;
-              }
-              resumeTimer = setTimeout(checkResume, 100);
-            };
-            resumeTimer = setTimeout(checkResume, 100);
-
-            if (signal) {
-              signal.addEventListener("abort", () => {
-                if (resumeTimer) {
-                  clearTimeout(resumeTimer);
-                  resumeTimer = null;
-                }
-                reject(new DOMException("The operation was aborted", "AbortError"));
-              });
-            }
-          });
-        }
-      }
-
-      // 执行实际的分片上传
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("PUT", url, true);
-
-        if (headers) {
-          Object.keys(headers).forEach((key) => {
-            xhr.setRequestHeader(key, headers[key]);
-          });
-        }
-
-        xhr.responseType = "text";
-
-        // 处理取消信号
-        function onabort() {
-          xhr.abort();
-        }
-        function cleanup() {
-          if (signal) {
-            signal.removeEventListener("abort", onabort);
-          }
-        }
-        if (signal) {
-          signal.addEventListener("abort", onabort);
-        }
-
-        xhr.onabort = () => {
-          cleanup();
-          const err = new DOMException("The operation was aborted", "AbortError");
-          reject(err);
-        };
-
-        const progressHandler = (evt) => {
-          try {
-            const loaded = evt?.loaded ?? 0;
-            const total = evt?.total ?? size;
-            onProgress?.({ loaded, total, lengthComputable: true });
-          } catch {}
-        };
-        xhr.upload.addEventListener("progress", progressHandler);
-
-        xhr.addEventListener("load", (ev) => {
-          cleanup();
-          const target = ev.target;
-
-          if (target.status < 200 || target.status >= 300) {
-            // 记录底层返回的详细错误信息，便于调试 OneDrive 等后端预签名直传问题
-            try {
-              console.error(
-                "[StorageAdapter] uploadSingleFile HTTP error",
-                {
-                  status: target.status,
-                  statusText: target.statusText,
-                  responseText: target.responseText,
-                },
-              );
-            } catch {}
-            const error = new Error(`HTTP ${target.status}: ${target.statusText}`);
-            error.source = target;
-            reject(error);
-            return;
-          }
-
-          try { onProgress?.({ loaded: size, total: size, lengthComputable: true }); } catch {}
-
-          // 获取ETag
-          let etag = target.getResponseHeader("ETag");
-
-          // 对于 single_session 策略（OneDrive 等），服务器不会返回 ETag 头部，
-          // 这里只需要为 Uppy 提供一个占位值即可，后端不会依赖该 ETag 完成合并。
-          if (etag === null && isSingleSession) {
-            etag = `onedrive-part-${Date.now()}`;
-          }
-
-          if (etag === null) {
-            reject(
-              new Error(
-                "Could not read the ETag header. This likely means CORS is not configured correctly.",
-              ),
-            );
-            return;
-          }
-
-          // 将成功上传的分片添加到localStorage缓存（仅对 per_part_url 模式有意义）
-          if (!isSingleSession && key && partNumber != null) {
-            this.addPartToStorage(key, {
-              ETag: etag,
-              PartNumber: partNumber,
-              Size: size,
-            });
-
-            console.log(
-              `[StorageAdapter] 🚀 分片${partNumber}上传成功，添加到localStorage (ETag: ${etag})`,
-            );
-          }
-
-          onComplete(etag);
-          resolve({ ETag: etag });
-        });
-
-        xhr.addEventListener("error", (ev) => {
-          cleanup();
-          const error = new Error("Upload failed");
-          error.source = ev.target;
-          reject(error);
-        });
-
-        xhr.send(body);
-      });
-    } catch (error) {
-      console.error("[StorageAdapter] uploadPartBytes失败:", error);
-      throw error;
-    }
+    return uploadPartBytesImpl.call(this, { signature, body, onComplete, size, onProgress, signal });
   }
 
   /**
-   * 单文件上传 - 使用 XMLHttpRequest 避免 CORS 问题
-   * 用于 PRESIGNED_SINGLE 策略,替代 Uppy 默认的 fetch API
-   * @param {Object} options {signature, body, onComplete, size, onProgress, signal}
-   * @returns {Promise<Object>} {ETag}
+   * 单文件直传（presigned-single）适配
    */
   async uploadSingleFile({ signature, body, onComplete, size, onProgress, signal }) {
-    try {
-      const { url, headers } = signature;
-
-      if (!url) {
-        throw new Error("Cannot upload to an undefined URL");
-      }
-
-      console.log(`[StorageAdapter] uploadSingleFile 被调用: ${url}`);
-
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("PUT", url, true);
-
-        // 设置请求头
-        if (headers) {
-          Object.keys(headers).forEach((key) => {
-            xhr.setRequestHeader(key, headers[key]);
-          });
-        }
-
-        xhr.responseType = "text";
-
-        // 处理取消信号
-        function onabort() {
-          xhr.abort();
-        }
-        function cleanup() {
-          if (signal) {
-            signal.removeEventListener("abort", onabort);
-          }
-        }
-        if (signal) {
-          signal.addEventListener("abort", onabort);
-        }
-
-        xhr.onabort = () => {
-          cleanup();
-          const err = new DOMException("The operation was aborted", "AbortError");
-          reject(err);
-        };
-
-        // 进度事件
-        const progressHandler = (evt) => {
-          try {
-            const loaded = evt?.loaded ?? 0;
-            const total = evt?.total ?? size;
-            onProgress?.({ loaded, total, lengthComputable: true });
-          } catch {}
-        };
-        xhr.upload.addEventListener("progress", progressHandler);
-
-        // 上传完成
-        xhr.addEventListener("load", (ev) => {
-          cleanup();
-          const target = ev.target;
-
-          if (target.status < 200 || target.status >= 300) {
-            const error = new Error(`HTTP ${target.status}: ${target.statusText}`);
-            error.source = target;
-            reject(error);
-            return;
-          }
-
-          try {
-            onProgress?.({ loaded: size, total: size, lengthComputable: true });
-          } catch {}
-
-          // 获取 ETag
-          const etag = target.getResponseHeader("ETag");
-          if (etag === null) {
-            // 即使读不到 ETag,也不报错,因为文件已经上传成功
-            // commit 阶段会由后端通过 HeadObject 获取 ETag
-            console.warn("[StorageAdapter] ⚠️ 无法读取 ETag (CORS),将由后端验证");
-            onComplete?.(null);
-            resolve({ ETag: null });
-            return;
-          }
-
-          console.log(`[StorageAdapter] ✅ 单文件上传成功 (ETag: ${etag})`);
-          onComplete?.(etag);
-          resolve({ ETag: etag });
-        });
-
-        // 上传失败
-        xhr.addEventListener("error", (ev) => {
-          cleanup();
-          const error = new Error("Upload failed");
-          error.source = ev.target;
-          reject(error);
-        });
-
-        xhr.send(body);
-      });
-    } catch (error) {
-      console.error("[StorageAdapter] uploadSingleFile 失败:", error);
-      throw error;
-    }
+    return await this.uploadPartBytes({ signature, body, onComplete, size, onProgress, signal });
   }
 
-  /**
-   * 提交预签名上传完成 - CloudPaste特有功能
-   * @param {Object} file Uppy文件对象
-   * @param {Object} response 上传响应
-   * @returns {Promise<Object>} 提交结果
-   */
-  async commitPresignedUpload(file, response) {
-    try {
-      console.log(`[StorageAdapter] 提交预签名上传完成: ${file.name}`);
-
-      // 获取缓存的上传信息
-      const uploadInfo = this.uploadSessions.get(file.id);
-      if (!uploadInfo) {
-        throw new Error("找不到上传会话信息");
-      }
-
-      // 从响应中提取ETag（如果有的话）
-      const etag = response?.etag || response?.ETag || null;
-
-      // 调用commit接口，使用正确的参数格式
-      const commitResponse = await fsApi.commitPresignedUpload(
-        {
-          targetPath: uploadInfo.targetPath,
-          mountId: uploadInfo.mountId,
-          fileId: uploadInfo.fileId,
-          storagePath: uploadInfo.storagePath,
-          publicUrl: uploadInfo.publicUrl,
-          storageConfigId: uploadInfo.storageConfigId,
-          contentType: uploadInfo.contentType,
-        },
-        etag,
-        uploadInfo.contentType,
-        file.size
-      );
-
-      if (!commitResponse.success) {
-        throw new Error(commitResponse.message || "提交预签名上传失败");
-      }
-
-      this.uploadSessions.delete(file.id);
-
-      console.log(`[StorageAdapter] 预签名上传commit成功: ${file.name}`);
-      return commitResponse;
-    } catch (error) {
-      console.error(`[StorageAdapter] 预签名上传commit失败: ${file.name}`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * 清理所有上传会话和localStorage分片缓存
-   */
   cleanup() {
     this.uploadSessions.clear();
-    // 清理所有localStorage中的分片缓存
-    this.clearAllUploadedPartsFromStorage();
-    console.log(`[StorageAdapter] 清理所有上传会话和localStorage分片缓存`);
-  }
-
-  /**
-   * 清理所有localStorage中的分片缓存
-   */
-  clearAllUploadedPartsFromStorage() {
-    try {
-      const keysToRemove = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith(this.STORAGE_PREFIX)) {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach((key) => localStorage.removeItem(key));
-      console.log(`[StorageAdapter] 清理了${keysToRemove.length}个localStorage分片缓存`);
-    } catch (error) {
-      console.warn(`[StorageAdapter] 清理localStorage失败:`, error);
-    }
+    const removed = clearAllClientLedgers({ storagePrefix: this.config.storagePrefix });
+    console.log(`[StorageAdapter] 清理所有上传会话与客户端账本：removed=${removed}`);
   }
 
   /**
