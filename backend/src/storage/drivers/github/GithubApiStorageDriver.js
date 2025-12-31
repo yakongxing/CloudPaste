@@ -433,7 +433,7 @@ export class GithubApiStorageDriver extends BaseDriver {
 
   async uploadFile(fsPath, fileOrStream, options = {}) {
     this._ensureInitialized();
-    const { subPath = "/", filename, contentLength } = options;
+    const { subPath = "/", filename, contentLength, mount } = options;
 
     const normalizedSubPath = this._normalizeSubPath(subPath);
     const targetSubPath = this._resolveTargetSubPath(normalizedSubPath, fsPath, filename);
@@ -450,10 +450,16 @@ export class GithubApiStorageDriver extends BaseDriver {
       );
     });
 
-    const name = filename || this._basename(fsPath, false) || "upload.bin";
-    const base = String(fsPath || "/").replace(/\/+$/, "") || "/";
-    const finalFsPath = base === "/" ? `/${name}` : `${base}/${name}`;
-    return { success: true, storagePath: finalFsPath, message: "GITHUB_API_UPLOAD" };
+    // storagePath 语义对齐：
+    // - FS（mount 视图）：返回挂载路径（/mount/.../file）
+    // - storage-first（ObjectStore/分享上传/直传）：返回传入的 subPath（避免出现 file/file）
+    const storagePath = mount
+      ? this._buildMountPath(mount, targetSubPath)
+      : typeof subPath === "string" && subPath
+        ? subPath
+        : targetSubPath;
+
+    return { success: true, storagePath, message: "GITHUB_API_UPLOAD" };
   }
 
   async updateFile(fsPath, content, options = {}) {
@@ -1637,18 +1643,6 @@ export class GithubApiStorageDriver extends BaseDriver {
     // 后端 /api/fs/upload（流式与表单）默认将 path 作为“目标目录”，文件名通过 filename 传入
     // 因此只要带 filename，就一律按“目录 + 文件名”语义拼接
     if (name) {
-      // 兼容 ObjectStore/分享上传：此时 subPath 可能已经是完整文件路径（含文件名），并且也会传入 filename
-      // 如果此时再拼接，会导致出现 “file.png/file.png” 这种“文件名目录”。
-      const normalizedFull = this._normalizeFullFsPath(fsPath);
-      const normalizedName = String(name).replace(/^\/+/, "").replace(/\/+$/, "");
-      if (normalizedName) {
-        const fullSuffix = `/${normalizedName}`;
-        const spIsFull = sp !== "/" && sp.endsWith(fullSuffix);
-        const fsIsFull = normalizedFull !== "/" && normalizedFull.endsWith(fullSuffix);
-        if (spIsFull && (!fsPath || fsIsFull)) {
-          return sp;
-        }
-      }
       const base = sp === "/" ? "" : sp.replace(/\/+$/, "");
       return `${base}/${name}`.replace(/\/+/g, "/");
     }
