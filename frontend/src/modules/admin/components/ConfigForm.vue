@@ -13,8 +13,10 @@ import {
 import { useAdminStorageTypeBehavior } from "@/modules/admin/storage/adminStorageTypeBehavior.js";
 import { api } from "@/api";
 import { IconEye, IconEyeOff, IconRefresh } from "@/components/icons";
+import { createLogger } from "@/utils/logger.js";
 
 const { t } = useI18n();
+const log = createLogger("ConfigForm");
 
 // 接收属性
 const props = defineProps({
@@ -608,7 +610,7 @@ const submitForm = async () => {
       emit("close");
     }, 1000);
   } catch (err) {
-    console.error("存储配置操作失败:", err);
+    log.error("存储配置操作失败:", err);
     error.value = err.message || "操作失败，请重试";
   } finally {
     loading.value = false;
@@ -632,7 +634,7 @@ onMounted(async () => {
     applySchemaDefaultValues(currentConfigSchema.value);
     normalizeFormBooleans();
   } catch (e) {
-    console.error("加载存储类型元数据失败:", e);
+    log.error("加载存储类型元数据失败:", e);
   }
 });
 </script>

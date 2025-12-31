@@ -1,5 +1,8 @@
 import { ref, computed, onMounted } from "vue";
 import { api } from "@/api";
+import { createLogger } from "@/utils/logger.js";
+
+const log = createLogger("StorageTypePresentation");
 
 /**
  * Admin 存储类型展示/样式 helper
@@ -19,7 +22,7 @@ async function ensureLoadedInternal() {
     storageTypesMeta.value = Array.isArray(resp?.data) ? resp.data : Array.isArray(resp) ? resp : [];
     loaded = true;
   } catch (e) {
-    console.error("加载存储类型元数据失败(useStorageTypePresentation):", e);
+    log.error("加载存储类型元数据失败(useStorageTypePresentation):", e);
     storageTypesMeta.value = [];
   } finally {
     loading.value = false;

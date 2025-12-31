@@ -111,10 +111,11 @@
               slugError ? (darkMode ? 'border-red-500' : 'border-red-600') : '',
             ]"
             :placeholder="t('file.customLinkPlaceholder')"
-            :disabled="isUploading"
+            :disabled="isUploading || isMultiFileUpload"
             @input="validateCustomLink"
           />
-          <p v-if="slugError" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ slugError }}</p>
+          <p v-if="isMultiFileUpload" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('file.multiFileSlugDisabled') }}</p>
+          <p v-else-if="slugError" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ slugError }}</p>
           <p v-else class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t("file.onlyAllowedChars") }}</p>
         </div>
 
@@ -224,6 +225,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import { IconChevronDown, IconClose, IconRefresh } from "@/components/icons";
+import { createLogger } from "@/utils/logger.js";
 
 import Dashboard from "@uppy/dashboard";
 
@@ -266,13 +268,13 @@ const emit = defineEmits(["upload-success", "upload-error", "share-results"]);
 
 // 国际化
 const { locale, t } = useI18n();
+const log = createLogger("UppyShareUploader");
 
 // 使用Composables
 const { uppyInstance, initializeUppy, destroyUppy, snapshotFiles, restoreFiles } = useUppyCore();
 const { fileCount } = useUppyEvents({
   uppy: uppyInstance,
   onFileAdded: (file) => {
-    console.log("[UppyShareUploader] 文件已添加:", file.name);
     if (maxUploadBytes.value && file?.size > maxUploadBytes.value) {
       errorMessage.value = t("file.maxSizeExceeded", { size: formatMaxFileSize() });
       try {
@@ -283,10 +285,9 @@ const { fileCount } = useUppyEvents({
     errorMessage.value = "";
   },
   onFileRemoved: (file) => {
-    console.log("[UppyShareUploader] 文件已移除:", file.name);
   },
   onRestrictionFailed: (file, error) => {
-    console.warn("[UppyShareUploader] 文件未通过限制", file?.name, error);
+    log.warn("[UppyShareUploader] 文件未通过限制", file?.name, error);
     errorMessage.value = error?.message || t("file.maxSizeExceeded", { size: formatMaxFileSize() });
   },
   onError: (error) => {
@@ -299,7 +300,6 @@ const { fileCount } = useUppyEvents({
 useUppyPaste({
   uppy: uppyInstance,
   onPaste: (file) => {
-    console.log("[UppyShareUploader] 粘贴文件:", file.name);
   },
 });
 
@@ -389,7 +389,7 @@ watch(currentStorageConfig, (config) => {
     const allowPresign = shareCaps.presigned === true || shareCaps.presign === true || driverType === "S3";
     canUsePresignMode.value = allowPresign;
   } catch (error) {
-    console.warn("[UppyShareUploader] 解析驱动失败，使用存储类型回退", error);
+    log.warn("[UppyShareUploader] 解析驱动失败，使用存储类型回退", error);
     canUsePresignMode.value = storageType === "S3";
   }
 
@@ -402,6 +402,7 @@ watch(currentStorageConfig, (config) => {
 // 计算属性
 const isSlugValid = computed(() => !formData.slug || !slugError.value);
 const isMaxViewsValid = computed(() => Number(formData.max_views) >= 0);
+const isMultiFileUpload = computed(() => fileCount.value > 1);
 const canStartUpload = computed(() => {
   return fileCount.value > 0 && !isUploading.value && !!formData.storage_config_id && isSlugValid.value && isMaxViewsValid.value;
 });
@@ -429,7 +430,7 @@ const loadMaxUploadSize = async () => {
       maxFileSizeMB.value = size;
     }
   } catch (error) {
-    console.warn("[UppyShareUploader] 获取最大上传大小失败", error);
+    log.warn("[UppyShareUploader] 获取最大上传大小失败", error);
   }
 };
 
@@ -507,7 +508,7 @@ const setupUppy = async ({ preserveFiles = false } = {}) => {
 
     restoreFiles(preservedFiles);
   } catch (error) {
-    console.error("[UppyShareUploader] 初始化失败:", error);
+    log.error("[UppyShareUploader] 初始化失败:", error);
     errorMessage.value = t("file.messages.uploadFailed", { message: error.message });
   }
 };
@@ -544,6 +545,17 @@ const validateCustomLink = (event) => {
   handleSlugInput(event?.target?.value ?? formData.slug);
   return validateSlug();
 };
+
+// 多文件上传：禁用自定义后缀（slug），并在文件数变为 2+ 时自动清空
+watch(
+  () => fileCount.value,
+  (count) => {
+    if (count > 1 && formData.slug) {
+      handleSlugInput('');
+    }
+  },
+  { immediate: true },
+);
 
 /**
  * 验证最大查看次数
@@ -596,9 +608,6 @@ const buildShareResultEntry = (item) => {
 const extractShareResults = (uploadResults = []) => {
   const normalized = uploadResults.map((item) => {
     const entry = buildShareResultEntry(item);
-    if (!entry) {
-      console.debug("[UppyShareUploader] missing shareRecord for item", item);
-    }
     return entry;
   });
   return normalized.filter((entry) => entry && entry.shareUrl);
@@ -625,7 +634,6 @@ const flushPendingShareResults = () => {
   });
 
   if (!ready.length) {
-    console.debug("[UppyShareUploader] pending share records not ready", waiting.map((item) => item.id));
     pendingShareItems.value = waiting;
     return;
   }
@@ -653,6 +661,11 @@ const startUpload = async () => {
     return;
   }
 
+  // 多文件上传时强制禁用自定义后缀
+  if (isMultiFileUpload.value && formData.slug) {
+    handleSlugInput('');
+  }
+
   // 前置检查
   if (!formData.storage_config_id) {
     errorMessage.value = t("file.messages.noStorageConfig");
@@ -662,7 +675,7 @@ const startUpload = async () => {
     errorMessage.value = t("file.messages.negativeMaxViews");
     return;
   }
-  if (formData.slug && !validateSlug()) {
+  if (!isMultiFileUpload.value && formData.slug && !validateSlug()) {
     errorMessage.value = slugError.value;
     return;
   }
@@ -676,7 +689,9 @@ const startUpload = async () => {
     emit("share-results", []);
     resetShareCaches();
 
-    const basePayload = buildPayloadForFile(formData);
+    const basePayload = buildPayloadForFile(
+      isMultiFileUpload.value ? { ...formData, slug: '' } : formData,
+    );
 
     let session;
     if (uploadMode.value === "presigned" && canUsePresignMode.value) {
@@ -693,11 +708,10 @@ const startUpload = async () => {
             }
           },
           onError: ({ file, error }) => {
-            console.error("[UppyShareUploader] 上传错误:", file?.name, error);
+            log.error("[UppyShareUploader] 上传错误:", file?.name, error);
             errorMessage.value = error?.message || t("file.messages.uploadFailed");
-          },
+          }, 
           onComplete: (result) => {
-            console.log("[UppyShareUploader] 上传完成:", result);
             const failedDescriptors = (result?.failed || []).map((item) =>
               buildErrorDescriptor(item?.error || new Error(t("file.messages.uploadFailed")))
             );
@@ -714,7 +728,6 @@ const startUpload = async () => {
               emit("share-results", normalizedShareResults);
               resetShareCaches();
             } else if (pendingShareItems.value.length) {
-              console.debug("[UppyShareUploader] waiting for share-record events", pendingShareItems.value.map((item) => item.id));
             }
 
             flushPendingShareResults();
@@ -739,9 +752,8 @@ const startUpload = async () => {
             }
 
             disposeShareSession();
-          },
+          }, 
           onShareRecord: ({ file, shareRecord }) => {
-            console.debug("[UppyShareUploader] share-record event", file?.id, shareRecord);
             if (file?.id && shareRecord) {
               shareRecordMap.set(file.id, shareRecord);
             }
@@ -764,11 +776,10 @@ const startUpload = async () => {
           }
         },
         onError: ({ file, error }) => {
-          console.error("[UppyShareUploader] 上传错误:", file?.name, error);
+          log.error("[UppyShareUploader] 上传错误:", file?.name, error);
           errorMessage.value = error?.message || t("file.messages.uploadFailed");
         },
         onComplete: (result) => {
-          console.log("[UppyShareUploader] 上传完成:", result);
           const failedDescriptors = (result?.failed || []).map((item) =>
             buildErrorDescriptor(item?.error || new Error(t("file.messages.uploadFailed")))
           );
@@ -785,7 +796,6 @@ const startUpload = async () => {
             emit("share-results", normalizedShareResults);
             resetShareCaches();
           } else if (pendingShareItems.value.length) {
-            console.debug("[UppyShareUploader] waiting for share-record events", pendingShareItems.value.map((item) => item.id));
           }
 
           flushPendingShareResults();
@@ -812,7 +822,6 @@ const startUpload = async () => {
           disposeShareSession();
         },
         onShareRecord: ({ file, shareRecord }) => {
-          console.debug("[UppyShareUploader] share-record event", file?.id, shareRecord);
           if (file?.id && shareRecord) {
             shareRecordMap.set(file.id, shareRecord);
           }
@@ -830,7 +839,7 @@ const startUpload = async () => {
 
     await session.start();
   } catch (error) {
-    console.error("[UppyShareUploader] 上传失败", error);
+    log.error("[UppyShareUploader] 上传失败", error);
     errorMessage.value = error.message || t("file.messages.uploadFailed");
     emit("upload-error", error);
     disposeShareSession();

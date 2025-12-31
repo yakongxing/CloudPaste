@@ -7,7 +7,7 @@
     :selectable="true"
     :selected-items="selectedPastes"
     row-id-field="id"
-    empty-text="暂无文本分享数据"
+    :empty-text="$t('admin.paste.table.noData')"
     @selection-change="handleSelectionChange"
   >
     <template #mobile="{ data }">
