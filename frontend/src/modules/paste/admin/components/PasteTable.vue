@@ -642,7 +642,7 @@ const pasteColumns = computed(() => [
           {
             class: "text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative",
             title: "复制原始链接",
-            onClick: () => emit("copy-raw-link", paste),
+            onClick: () => emit("copy-raw-link", paste.slug),
           },
           [
             h(
