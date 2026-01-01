@@ -254,19 +254,18 @@ export function useStorageConfigManagement(options = {}) {
       this.raw = result || {};
 
       // 处理嵌套的 result 结构
-      // 如果有 result 字段，优先使用 result 内容
-      let inner = this.raw;
+      const outer = this.raw && typeof this.raw === "object" && this.raw.data && typeof this.raw.data === "object" ? this.raw.data : this.raw;
+      let inner = outer;
       
-      // 检查是否有嵌套的 result 字段（S3/WebDAV 的情况）
-      if (this.raw.result && typeof this.raw.result === 'object') {
+      // 检查是否有嵌套的 result 字段
+      if (outer && outer.result && typeof outer.result === "object") {
         // LOCAL 测试：result 包含 pathExists/readPermission/writePermission
-        if (this.raw.result.pathExists || this.raw.result.readPermission || this.raw.result.writePermission) {
-          inner = this.raw.result;
+        if (outer.result.pathExists || outer.result.readPermission || outer.result.writePermission) {
+          inner = outer.result;
         }
-        // S3/WebDAV 测试：result 包含 read/write/cors/frontendSim/info
-        else if (this.raw.result.read || this.raw.result.write || this.raw.result.cors || 
-                 this.raw.result.frontendSim || this.raw.result.info) {
-          inner = this.raw.result;
+        // S3/WebDAV/其它通用测试：result 包含 read/write/cors/frontendSim/info
+        else if (outer.result.read || outer.result.write || outer.result.cors || outer.result.frontendSim || outer.result.info) {
+          inner = outer.result;
         }
       }
 
@@ -608,7 +607,7 @@ export function useStorageConfigManagement(options = {}) {
         partialSuccess: status.isPartialSuccess,
         message: processor.generateStatusMessage(),
         details: processor.generateDetailsMessage(),
-        result: result || {},
+        result: processor.result || {},
         loading: false,
       };
     } catch (err) {

@@ -470,6 +470,16 @@ watch(
   },
 );
 
+// 监听 MIRROR preset 变化（选择模板后自动回填 endpoint_url）
+watch(
+  () => [formData.value.storage_type, formData.value.preset],
+  ([type]) => {
+    if (type === "MIRROR") {
+      ensureTypeDefaults();
+    }
+  },
+);
+
 // 监听编辑的配置变化
 watch(
   () => props.config,
@@ -557,33 +567,24 @@ const submitForm = async () => {
     if (props.isEdit && props.config?.id) {
       const updateData = { ...buildPayload() };
 
-      // S3 密钥字段：空值或掩码值不提交（保留原值）
-      if (!updateData.access_key_id || updateData.access_key_id.trim() === "" || isMaskedValue(updateData.access_key_id)) {
-        delete updateData.access_key_id;
-      }
+      // 通用规则：所有 secret 字段（按后端 schema 定义）在编辑时都遵循：
+      // - 空值：不提交（保留原值）
+      // - masked 占位符（*****1234）：不提交（保留原值）
+      const schema = currentConfigSchema.value;
+      const secretFields = Array.isArray(schema?.fields)
+        ? schema.fields
+            .filter((f) => f && typeof f === "object" && f.type === "secret" && typeof f.name === "string" && f.name)
+            .map((f) => f.name)
+        : [];
 
-      if (!updateData.secret_access_key || updateData.secret_access_key.trim() === "" || isMaskedValue(updateData.secret_access_key)) {
-        delete updateData.secret_access_key;
-      }
-
-      // WebDAV 密码字段：空值或掩码值不提交（保留原值）
-      if (isWebDavType.value && (!updateData.password || updateData.password.trim() === "" || isMaskedValue(updateData.password))) {
-        delete updateData.password;
-      }
-
-      // OneDrive / GoogleDrive 密钥字段：空值或掩码值不提交（保留原值）
-      if (
-        (isOneDriveType.value || isGoogleDriveType.value) &&
-        (!updateData.client_secret || updateData.client_secret.trim() === "" || isMaskedValue(updateData.client_secret))
-      ) {
-        delete updateData.client_secret;
-      }
-
-      if (
-        (isOneDriveType.value || isGoogleDriveType.value) &&
-        (!updateData.refresh_token || updateData.refresh_token.trim() === "" || isMaskedValue(updateData.refresh_token))
-      ) {
-        delete updateData.refresh_token;
+      for (const fieldName of secretFields) {
+        if (!Object.prototype.hasOwnProperty.call(updateData, fieldName)) continue;
+        const raw = updateData[fieldName];
+        const str = typeof raw === "string" ? raw.trim() : "";
+        const shouldSkip = raw === null || raw === undefined || str.length === 0 || isMaskedValue(str);
+        if (shouldSkip) {
+          delete updateData[fieldName];
+        }
       }
 
       savedConfig = await updateStorageConfig(props.config.id, updateData);

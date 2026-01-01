@@ -58,9 +58,17 @@ const BADGE_THEME_CLASS = {
     light: "bg-sky-100 text-sky-700",
     dark: "bg-sky-800 text-sky-100",
   },
+  discord: {
+    light: "bg-indigo-100 text-indigo-800",
+    dark: "bg-indigo-700 text-indigo-100",
+  },
   huggingface: {
     light: "bg-yellow-100 text-yellow-800",
     dark: "bg-yellow-700 text-yellow-100",
+  },
+  mirror: {
+    light: "bg-purple-100 text-purple-800",
+    dark: "bg-purple-700 text-purple-100",
   },
   default: {
     light: "bg-gray-100 text-gray-700",
@@ -88,8 +96,12 @@ function resolveBadgeTheme(type) {
       return "local";
     case "TELEGRAM":
       return "telegram";
+    case "DISCORD":
+      return "discord";
     case "HUGGINGFACE_DATASETS":
       return "huggingface";
+    case "MIRROR":
+      return "mirror";
     default:
       return "default";
   }

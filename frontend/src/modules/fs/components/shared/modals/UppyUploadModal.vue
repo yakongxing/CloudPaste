@@ -184,6 +184,8 @@ const uppyContainerRef = ref(null);
 const uploadMethod = ref("presigned");
 const canUsePresigned = ref(true);
 const canUseMultipart = ref(true);
+const canUseStream = ref(true);
+const canUseForm = ref(true);
 const currentDriverType = ref(null);
 const errorMessage = ref("");
 const isUploading = ref(false);
@@ -239,16 +241,26 @@ const enforceUploadMethodByDriver = (driver) => {
   const fsCaps = driver?.capabilities?.fs || {};
   const allowPresigned = fsCaps.presignedSingle === true;
   const allowMultipart = fsCaps.multipart === true;
+  const allowStream = fsCaps.backendStream !== false;
+  const allowForm = fsCaps.backendForm !== false;
   canUsePresigned.value = allowPresigned;
   canUseMultipart.value = allowMultipart;
+  canUseStream.value = allowStream;
+  canUseForm.value = allowForm;
   currentDriverType.value = driver?.config?.storage_type || driver?.type || null;
 
-  if (!allowPresigned && uploadMethod.value === "presigned") {
-    uploadMethod.value = allowMultipart ? "multipart" : "stream";
-  }
-  if (!allowMultipart && uploadMethod.value === "multipart") {
-    uploadMethod.value = allowPresigned ? "presigned" : "stream";
-  }
+  const pickFallback = () => {
+    if (allowMultipart) return "multipart";
+    if (allowPresigned) return "presigned";
+    if (allowStream) return "stream";
+    if (allowForm) return "form";
+    return "stream";
+  };
+
+  if (uploadMethod.value === "presigned" && !allowPresigned) uploadMethod.value = pickFallback();
+  if (uploadMethod.value === "multipart" && !allowMultipart) uploadMethod.value = pickFallback();
+  if (uploadMethod.value === "stream" && !allowStream) uploadMethod.value = pickFallback();
+  if (uploadMethod.value === "form" && !allowForm) uploadMethod.value = pickFallback();
 };
 
 const getMountRootFromPath = (path) => {
@@ -337,12 +349,14 @@ const uploadModes = computed(() => {
       label: t("mount.uppy.streamUpload"),
       modeLabel: t("mount.uppy.streamMode"),
       tooltip: t("mount.uppy.streamModeTooltip"),
+      disabled: !canUseStream.value,
     },
     {
       value: "form",
       label: t("mount.uppy.formUpload"),
       modeLabel: t("mount.uppy.formMode"),
       tooltip: t("mount.uppy.formModeTooltip"),
+      disabled: !canUseForm.value,
     },
     {
       value: "multipart",
@@ -367,7 +381,15 @@ const {
 
 // 计算属性
 const canStartUpload = computed(() => {
-  return fileCount.value > 0 && !isUploading.value;
+  const hasFiles = fileCount.value > 0 && !isUploading.value;
+  if (!hasFiles) return false;
+
+  // 如果当前模式已被禁用，就不允许“开始上传”
+  if (uploadMethod.value === "presigned") return canUsePresigned.value === true;
+  if (uploadMethod.value === "multipart") return canUseMultipart.value === true;
+  if (uploadMethod.value === "stream") return canUseStream.value === true;
+  if (uploadMethod.value === "form") return canUseForm.value === true;
+  return false;
 });
 
 const enabledPluginsCount = computed(() => {

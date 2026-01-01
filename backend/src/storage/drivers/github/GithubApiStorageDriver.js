@@ -13,7 +13,9 @@ import { buildFileInfo } from "../../utils/FileInfoBuilder.js";
 import { createHttpStreamDescriptor } from "../../streaming/StreamDescriptorUtils.js";
 import { buildFullProxyUrl } from "../../../constants/proxy.js";
 import { getMimeTypeFromFilename } from "../../../utils/fileUtils.js";
+import { MasqueradeClient } from "../../../utils/httpMasquerade.js";
 import { Buffer } from "buffer";
+import { decryptIfNeeded } from "../../../utils/crypto.js";
 
 const DEFAULT_API_BASE = "https://api.github.com";
 // GitHub Contents API 本身不提供“最后修改时间”，目录列表阶段不额外请求 commits（避免 N 次请求导致限流）
@@ -61,9 +63,20 @@ export class GithubApiStorageDriver extends BaseDriver {
     this._lastWriteAtMs = 0;
     /** @type {Map<string, string>} */
     this._treeShaCache = new Map();
+
+    // 浏览器伪装客户端
+    this._masqueradeClient = new MasqueradeClient({
+      deviceCategory: "desktop",
+      rotateIP: false,
+      rotateUA: false,
+    });
   }
 
   async initialize() {
+    // token 可能以 encrypted:* 存在（由存储配置 CRUD 统一加密写入）
+    const decryptedToken = await decryptIfNeeded(this.token, this.encryptionSecret);
+    this.token = typeof decryptedToken === "string" ? decryptedToken.trim() : decryptedToken;
+
     const errors = [];
     if (!this.owner) errors.push("GitHub API 配置缺少必填字段: owner");
     if (!this.repo) errors.push("GitHub API 配置缺少必填字段: repo");
@@ -1354,9 +1367,10 @@ export class GithubApiStorageDriver extends BaseDriver {
     return `${base}${pathname.startsWith("/") ? "" : "/"}${pathname}`;
   }
 
-  _buildHeaders(extra = {}) {
+  _buildHeaders(extra = {}, targetUrl = null) {
+    const browserHeaders = this._masqueradeClient.buildHeaders({}, targetUrl);
     const headers = {
-      "User-Agent": "CloudPaste-GithubApiStorageDriver",
+      ...browserHeaders,
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
       ...extra,

@@ -35,6 +35,7 @@ import {
   listSharedWithMeDirectory,
   injectSharedWithMeEntry,
 } from "./GoogleDriveSharedView.js";
+import { decryptIfNeeded } from "../../../utils/crypto.js";
 
 
 export class GoogleDriveStorageDriver extends BaseDriver {
@@ -79,6 +80,13 @@ export class GoogleDriveStorageDriver extends BaseDriver {
    * - 验证 token 可用性
    */
   async initialize() {
+    // secret 字段可能以 encrypted:* 存在（由存储配置 CRUD 统一加密写入）
+    const decryptedClientSecret = await decryptIfNeeded(this.clientSecret, this.encryptionSecret);
+    this.clientSecret = typeof decryptedClientSecret === "string" ? decryptedClientSecret : this.clientSecret;
+
+    const decryptedRefreshToken = await decryptIfNeeded(this.refreshToken, this.encryptionSecret);
+    this.refreshToken = typeof decryptedRefreshToken === "string" ? decryptedRefreshToken : this.refreshToken;
+
     this.authManager = new GoogleDriveAuthManager({
       useOnlineApi: this.useOnlineApi,
       apiAddress: this.apiAddress,

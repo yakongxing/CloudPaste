@@ -307,6 +307,8 @@ useUppyPaste({
 const uppyContainerRef = ref(null);
 const uploadMode = ref("presigned");
 const canUsePresignMode = ref(true);
+const canUseStreamMode = ref(true);
+const canUseFormMode = ref(true);
 const errorMessage = ref("");
 const isUploading = ref(false);
 const mediaPlugins = ref([]);
@@ -362,14 +364,14 @@ const uploadModes = computed(() => {
       label: t("file.uploadModes.stream"),
       modeLabel: t("file.uploadModes.streamMode"),
       tooltip: t("file.uploadModes.streamTooltip"),
-      disabled: isUploading.value,
+      disabled: !canUseStreamMode.value || isUploading.value,
     },
     {
       value: "form",
       label: t("file.uploadModes.form"),
       modeLabel: t("file.uploadModes.formMode"),
       tooltip: t("file.uploadModes.formTooltip"),
-      disabled: isUploading.value,
+      disabled: !canUseFormMode.value || isUploading.value,
     },
   ];
   return modes;
@@ -379,6 +381,8 @@ const uploadModes = computed(() => {
 watch(currentStorageConfig, (config) => {
   if (!config) {
     canUsePresignMode.value = false;
+    canUseStreamMode.value = true;
+    canUseFormMode.value = true;
     return;
   }
   const storageType = (config.storage_type || config.provider_type || "").toUpperCase();
@@ -388,15 +392,27 @@ watch(currentStorageConfig, (config) => {
     const shareCaps = driver?.capabilities?.share || {};
     const allowPresign = shareCaps.presigned === true || shareCaps.presign === true || driverType === "S3";
     canUsePresignMode.value = allowPresign;
+    canUseStreamMode.value = shareCaps.backendStream !== false;
+    canUseFormMode.value = shareCaps.backendForm !== false;
   } catch (error) {
     log.warn("[UppyShareUploader] 解析驱动失败，使用存储类型回退", error);
     canUsePresignMode.value = storageType === "S3";
+    // 兜底：未知驱动时不主动禁用流式/表单，避免“能用却被禁用”
+    canUseStreamMode.value = true;
+    canUseFormMode.value = true;
   }
 
   // 如果当前模式不可用，自动切换
-  if (!canUsePresignMode.value && uploadMode.value === "presigned") {
-    uploadMode.value = "stream";
-  }
+  const pickFallback = () => {
+    if (canUsePresignMode.value) return "presigned";
+    if (canUseStreamMode.value) return "stream";
+    if (canUseFormMode.value) return "form";
+    return "stream";
+  };
+
+  if (uploadMode.value === "presigned" && !canUsePresignMode.value) uploadMode.value = pickFallback();
+  if (uploadMode.value === "stream" && !canUseStreamMode.value) uploadMode.value = pickFallback();
+  if (uploadMode.value === "form" && !canUseFormMode.value) uploadMode.value = pickFallback();
 });
 
 // 计算属性
@@ -404,7 +420,19 @@ const isSlugValid = computed(() => !formData.slug || !slugError.value);
 const isMaxViewsValid = computed(() => Number(formData.max_views) >= 0);
 const isMultiFileUpload = computed(() => fileCount.value > 1);
 const canStartUpload = computed(() => {
-  return fileCount.value > 0 && !isUploading.value && !!formData.storage_config_id && isSlugValid.value && isMaxViewsValid.value;
+  const basic =
+    fileCount.value > 0 &&
+    !isUploading.value &&
+    !!formData.storage_config_id &&
+    isSlugValid.value &&
+    isMaxViewsValid.value;
+  if (!basic) return false;
+
+  // 防呆：如果当前模式已被禁用，就不要允许“开始上传”
+  if (uploadMode.value === "presigned") return canUsePresignMode.value === true;
+  if (uploadMode.value === "stream") return canUseStreamMode.value === true;
+  if (uploadMode.value === "form") return canUseFormMode.value === true;
+  return false;
 });
 
 const enabledPluginsCount = computed(() => {
