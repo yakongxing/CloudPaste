@@ -68,7 +68,7 @@ export class HuggingFaceDatasetsStorageDriver extends BaseDriver {
     this.encryptionSecret = encryptionSecret;
     this.capabilities = [CAPABILITIES.READER, CAPABILITIES.DIRECT_LINK, CAPABILITIES.PROXY, CAPABILITIES.PAGED_LIST];
 
-    this._endpointBase = normalizeBaseUrl(config?.endpoint_base);
+    this._endpointBase = normalizeBaseUrl(config?.endpoint_url);
     this._repo = normalizeRepoId(config?.repo);
     this._repoParts = splitRepoId(this._repo);
     this._revision = String(config?.revision || DEFAULT_REVISION).trim() || DEFAULT_REVISION;

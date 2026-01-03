@@ -98,7 +98,7 @@ export class TelegramStorageDriver extends BaseDriver {
     const botTokenEncrypted = this.config?.bot_token || this.config?.botToken;
     const botToken = await decryptIfNeeded(botTokenEncrypted, this.encryptionSecret);
     const rawTargetChatId = this.config?.target_chat_id ?? this.config?.targetChatId;
-    const apiBaseUrl = normalizeApiBaseUrl(this.config?.api_base_url || this.config?.apiBaseUrl);
+    const apiBaseUrl = normalizeApiBaseUrl(this.config?.endpoint_url);
     const partSizeMb = Number(this.config?.part_size_mb ?? 15);
     const uploadConcurrency = Number(this.config?.upload_concurrency ?? 2);
     const botApiMode = String(this.config?.bot_api_mode || "official").trim().toLowerCase();

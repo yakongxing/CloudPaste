@@ -372,7 +372,7 @@ const handleFieldBlur = (fieldName) => {
   }
   if (fieldName === "endpoint_url") {
     formatUrl("endpoint_url");
-    // 针对具体类型的额外格式化逻辑（如 WebDAV endpoint 末尾追加斜杠）
+    // 针对具体类型的额外格式化逻辑（例如：某些类型只做 trim，不做强制“补 /”）
     formatFieldOnBlur("endpoint_url");
     return;
   }
@@ -391,7 +391,7 @@ const buildPayload = () => {
   };
 
   // 容量限制不在 schema 中，单独处理
-  if (formData.value.total_storage_bytes != null) {
+  if (formData.value.total_storage_bytes !== undefined) {
     base.total_storage_bytes = formData.value.total_storage_bytes;
   }
 
@@ -719,7 +719,7 @@ onMounted(async () => {
                 </select>
               </div>
               <p class="mt-1 text-xs" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
-                {{ formData.provider_type === "Cloudflare R2" || formData.provider_type === "Backblaze B2" ? "建议默认 10GB" : "建议默认 5GB" }}
+                用于限制该存储的最大可用容量（默认 10GB，清空=不限额）
               </p>
             </div>
 

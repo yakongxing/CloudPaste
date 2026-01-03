@@ -68,7 +68,8 @@ export class OneDriveStorageDriver extends BaseDriver {
     this.refreshToken = config.refresh_token;
     this.tokenRenewEndpoint = config.token_renew_endpoint || null;
     this.redirectUri = config.redirect_uri || null;
-    this.useOnlineApi = Boolean(config.use_online_api);
+    this.useOnlineApi = config?.use_online_api === 1;
+    this.enableDiskUsage = config?.enable_disk_usage === 1;
 
     // 内部组件（延迟初始化）
     this.authManager = null;
@@ -1384,13 +1385,71 @@ export class OneDriveStorageDriver extends BaseDriver {
   async getStats() {
     this._ensureInitialized();
 
-    return {
+    const base = {
       type: this.type,
       capabilities: this.capabilities,
       initialized: this.initialized,
       region: this.region,
       timestamp: new Date().toISOString(),
     };
+
+    if (!this.enableDiskUsage) {
+      return {
+        ...base,
+        supported: false,
+        message: "OneDrive 磁盘占用统计未启用（enable_disk_usage = false）",
+      };
+    }
+
+    // 上游配额（quota）读取
+    try {
+      const drive = await this.graphClient.getDrive({ selectQuotaOnly: true });
+      const quota = drive?.quota || null;
+      if (!quota || typeof quota !== "object") {
+        return {
+          ...base,
+          supported: false,
+          message: "OneDrive 未返回配额信息（quota）",
+        };
+      }
+
+      const parseQuotaNumber = (value) => {
+        if (value == null) return null;
+        const n = Number.parseInt(String(value), 10);
+        return Number.isFinite(n) && n >= 0 ? n : null;
+      };
+
+      const totalBytes = parseQuotaNumber(quota.total);
+      const remainingBytes = parseQuotaNumber(quota.remaining);
+      const deletedBytes = parseQuotaNumber(quota.deleted);
+      const usedBytes = parseQuotaNumber(quota.used) ?? (totalBytes != null && remainingBytes != null ? Math.max(0, totalBytes - remainingBytes) : null);
+      const state = quota.state != null ? String(quota.state) : null;
+
+      let usagePercent = null;
+      if (totalBytes && usedBytes != null && totalBytes > 0) {
+        usagePercent = Math.min(100, Math.round((usedBytes / totalBytes) * 100));
+      }
+
+      return {
+        ...base,
+        supported: true,
+        quota: {
+          raw: quota,
+          totalBytes,
+          usedBytes,
+          remainingBytes,
+          deletedBytes,
+          state,
+          usagePercent,
+        },
+      };
+    } catch (error) {
+      return {
+        ...base,
+        supported: false,
+        message: error?.message || String(error),
+      };
+    }
   }
 
   // ========== 私有辅助方法 ==========

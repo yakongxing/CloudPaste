@@ -52,7 +52,8 @@ const STORAGE_TYPE_BEHAVIOR_DEF = {
     secretFields: ["password"],
     /**
      * 字段格式化规则
-     * - endpoint_url 统一追加结尾斜杠
+     * - endpoint_url 不强制追加 “/”
+     * - 只做 trim（去掉前后空格）
      */
     formatOnBlur(fieldName, formData) {
       if (fieldName === "endpoint_url") {
@@ -61,11 +62,7 @@ const STORAGE_TYPE_BEHAVIOR_DEF = {
           formData.value.endpoint_url = "";
           return;
         }
-        let value = String(raw).trim();
-        if (!value.endsWith("/")) {
-          value = `${value}/`;
-        }
-        formData.value.endpoint_url = value;
+        formData.value.endpoint_url = String(raw).trim();
       }
     },
   },
@@ -86,10 +83,10 @@ const STORAGE_TYPE_BEHAVIOR_DEF = {
     secretFields: ["client_secret", "refresh_token"],
     /**
      * 字段禁用规则
-     * - api_address 仅在 use_online_api 启用时可编辑
+     * - endpoint_url 仅在 use_online_api 启用时可编辑
      */
     isFieldDisabled(fieldName, formData) {
-      if (fieldName === "api_address") {
+      if (fieldName === "endpoint_url") {
         return !formData.value.use_online_api;
       }
       return false;
@@ -142,7 +139,8 @@ const STORAGE_TYPE_BEHAVIOR_DEF = {
       }
     },
     /**
-     * endpoint_url 统一追加结尾斜杠
+     * endpoint_url 不强制追加 “/”
+     * - 只做 trim（去掉前后空格）
      */
     formatOnBlur(fieldName, formData) {
       if (fieldName === "endpoint_url") {
@@ -151,11 +149,7 @@ const STORAGE_TYPE_BEHAVIOR_DEF = {
           formData.value.endpoint_url = "";
           return;
         }
-        let value = String(raw).trim();
-        if (!value.endsWith("/")) {
-          value = `${value}/`;
-        }
-        formData.value.endpoint_url = value;
+        formData.value.endpoint_url = String(raw).trim();
       }
     },
   },

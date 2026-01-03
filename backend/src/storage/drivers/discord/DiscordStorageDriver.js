@@ -100,6 +100,21 @@ function resolveUploadDirAndName(targetPath, { isDirectoryTarget = false } = {})
   return splitDirAndName(normalized);
 }
 
+function normalizeDiscordApiBaseUrl(value, fallback) {
+  const raw = value != null ? String(value).trim() : "";
+  const base = raw ? raw.replace(/\/+$/, "") : String(fallback || "").trim().replace(/\/+$/, "");
+  if (!base) return "";
+  try {
+    const parsed = new URL(base);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new ValidationError("endpoint_url 必须以 http:// 或 https:// 开头");
+    }
+  } catch {
+    throw new ValidationError("endpoint_url 不是合法的 URL");
+  }
+  return base;
+}
+
 function normalizeDiscordChunkPartList(manifest) {
   const parts = Array.isArray(manifest?.parts) ? manifest.parts : [];
   return parts
@@ -135,6 +150,7 @@ export class DiscordStorageDriver extends BaseDriver {
 
     this.botToken = null;
     this.channelId = null;
+    this.apiBase = DISCORD_API_BASE;
     this.uploadConcurrency = 1;
     this.urlProxy = null;
     this.directUploadMaxBytes = DISCORD_DEFAULT_DIRECT_UPLOAD_MAX_BYTES;
@@ -150,6 +166,8 @@ export class DiscordStorageDriver extends BaseDriver {
 
     const channelIdRaw = this.config?.channel_id || this.config?.channelId;
     const channelId = channelIdRaw != null ? String(channelIdRaw).trim() : "";
+
+    const apiBase = normalizeDiscordApiBaseUrl(this.config?.endpoint_url, DISCORD_API_BASE);
 
     const concurrencyRaw =
       this.config?.upload_concurrency != null && this.config?.upload_concurrency !== "" ? Number(this.config.upload_concurrency) : null;
@@ -190,6 +208,7 @@ export class DiscordStorageDriver extends BaseDriver {
 
     this.botToken = botToken;
     this.channelId = channelId;
+    this.apiBase = apiBase;
     this.uploadConcurrency = uploadConcurrency;
     this.partSizeBytes = partSizeMb * 1024 * 1024;
     this.initialized = true;
@@ -291,7 +310,7 @@ export class DiscordStorageDriver extends BaseDriver {
 
   _buildDiscordApiUrl(pathname) {
     const p = String(pathname || "").replace(/^\//, "");
-    return `${DISCORD_API_BASE}/${p}`;
+    return `${this.apiBase}/${p}`;
   }
 
   _applyUrlProxy(url) {

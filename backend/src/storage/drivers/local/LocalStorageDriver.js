@@ -37,6 +37,9 @@ export class LocalStorageDriver extends BaseDriver {
 
     /** @type {string|null} root_path 规范化后的监狱根目录 */
     this.rootPath = null;
+
+    // 是否启用“磁盘配额读取”
+    this.enableDiskUsage = config?.enable_disk_usage === 1;
   }
 
   /**
@@ -85,7 +88,7 @@ export class LocalStorageDriver extends BaseDriver {
     // 是否允许在根目录不存在时自动创建（默认关闭，保持显式运维语义）
     const autoCreateRoot =
       this.config && Object.prototype.hasOwnProperty.call(this.config, "auto_create_root")
-        ? Boolean(this.config.auto_create_root)
+        ? this.config.auto_create_root === 1
         : false;
 
     let stat;
@@ -176,6 +179,84 @@ export class LocalStorageDriver extends BaseDriver {
     }
 
     this.initialized = true;
+  }
+
+  /**
+   * 获取存储驱动统计信息（可选实现）
+   * - 对 LOCAL：这里返回的是“宿主机磁盘/分区”的总量与可用量（类似 df），不是“目录占用”
+   * - 目录占用（local_fs）属于 computed_usage 的来源，由 StorageUsageService 扫 root_path 计算
+   *
+   * @returns {Promise<Object>}
+   */
+  async getStats() {
+    this._ensureInitialized();
+
+    const base = {
+      type: this.type,
+      capabilities: this.capabilities,
+      initialized: this.initialized,
+      rootPath: this.rootPath,
+      timestamp: new Date().toISOString(),
+      enableDiskUsage: this.enableDiskUsage,
+    };
+
+    if (!this.enableDiskUsage) {
+      return {
+        ...base,
+        supported: false,
+        message: "LOCAL 磁盘占用统计未启用（enable_disk_usage = false）",
+      };
+    }
+
+    // Node.js 18+ 支持 fs.promises.statfs；用于读取文件系统容量（Windows/Linux/macOS）
+    if (typeof fs.promises.statfs !== "function") {
+      return {
+        ...base,
+        supported: false,
+        message: "当前 Node.js 版本不支持 statfs，无法读取磁盘容量信息",
+      };
+    }
+
+    try {
+      const st = await fs.promises.statfs(this.rootPath);
+      const frsize = Number(st?.frsize || st?.bsize || 0);
+      const blocks = Number(st?.blocks || 0);
+      const bavail = Number(st?.bavail || 0);
+      if (!Number.isFinite(frsize) || !Number.isFinite(blocks) || frsize <= 0 || blocks <= 0) {
+        return {
+          ...base,
+          supported: false,
+          message: "读取磁盘容量信息失败（statfs 返回值无效）",
+        };
+      }
+
+      const totalBytes = Math.max(0, Math.trunc(frsize * blocks));
+      const remainingBytes = Math.max(0, Math.trunc(frsize * bavail));
+      const usedBytes = totalBytes > 0 ? Math.max(0, totalBytes - remainingBytes) : null;
+
+      let usagePercent = null;
+      if (totalBytes > 0 && usedBytes != null) {
+        usagePercent = Math.min(100, Math.round((usedBytes / totalBytes) * 100));
+      }
+
+      return {
+        ...base,
+        supported: true,
+        quota: {
+          raw: st,
+          totalBytes,
+          usedBytes,
+          remainingBytes,
+          usagePercent,
+        },
+      };
+    } catch (error) {
+      return {
+        ...base,
+        supported: false,
+        message: error?.message || String(error),
+      };
+    }
   }
 
   /**

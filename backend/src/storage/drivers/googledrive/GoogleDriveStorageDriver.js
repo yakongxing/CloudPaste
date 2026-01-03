@@ -60,13 +60,13 @@ export class GoogleDriveStorageDriver extends BaseDriver {
 
     // 配置字段
     this.rootId = config.root_id || "root";
-    this.enableDiskUsage = Boolean(config.enable_disk_usage);
-    this.useOnlineApi = Boolean(config.use_online_api);
-    this.apiAddress = config.api_address || null;
+    this.enableDiskUsage = config?.enable_disk_usage === 1;
+    this.useOnlineApi = config?.use_online_api === 1;
+    this.apiAddress = config.endpoint_url || null;
     this.clientId = config.client_id || null;
     this.clientSecret = config.client_secret || null;
     this.refreshToken = config.refresh_token || "";
-    this.enableSharedView = config.enable_shared_view !== false;
+    this.enableSharedView = config?.enable_shared_view === undefined ? true : config?.enable_shared_view === 1;
 
     // 内部组件（延迟初始化）
     this.authManager = null;

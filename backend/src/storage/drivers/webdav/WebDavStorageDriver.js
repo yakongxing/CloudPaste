@@ -36,7 +36,33 @@ export class WebDavStorageDriver extends BaseDriver {
     this.username = config.username || "";
     this.passwordEncrypted = config.password || "";
     this.urlProxy = config.url_proxy || null;
-    this.tlsSkipVerify = !!config.tls_insecure_skip_verify;
+    this.tlsSkipVerify = config?.tls_insecure_skip_verify === 1;
+    this.enableDiskUsage = config?.enable_disk_usage === 1;
+  }
+
+  /**
+   * 规范化 WebDAV endpoint_url：
+   * - 必须是合法 http(s) URL
+   * - pathname 确保以 / 结尾，避免某些 URL join 规则把最后一段当成“文件名”导致拼接错误
+   * @param {unknown} value
+   * @returns {string}
+   */
+  _normalizeClientEndpointUrl(value) {
+    const raw = value == null ? "" : String(value).trim();
+    if (!raw) return "";
+    let url;
+    try {
+      url = new URL(raw);
+    } catch {
+      throw new DriverError("WebDAV endpoint_url 不是合法的 URL", { status: ApiStatus.BAD_REQUEST, expose: true });
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new DriverError("WebDAV endpoint_url 必须以 http:// 或 https:// 开头", { status: ApiStatus.BAD_REQUEST, expose: true });
+    }
+    if (!url.pathname.endsWith("/")) {
+      url.pathname = `${url.pathname}/`;
+    }
+    return url.toString();
   }
 
   /**
@@ -48,16 +74,22 @@ export class WebDavStorageDriver extends BaseDriver {
       if (!password) {
         throw new DriverError("WebDAV 凭据不可用", { status: ApiStatus.FORBIDDEN });
       }
-      const agent = this.endpoint.startsWith("https://") && this.tlsSkipVerify ? new https.Agent({ rejectUnauthorized: false }) : undefined;
+      const endpointForClient = this._normalizeClientEndpointUrl(this.endpoint);
+      if (!endpointForClient) {
+        throw new DriverError("WebDAV 配置缺少 endpoint_url", { status: ApiStatus.BAD_REQUEST, expose: true });
+      }
+
+      const agent =
+        endpointForClient.startsWith("https://") && this.tlsSkipVerify ? new https.Agent({ rejectUnauthorized: false }) : undefined;
       const clientOptions = agent ? { httpsAgent: agent } : {};
-      this.client = createClient(this.endpoint, {
+      this.client = createClient(endpointForClient, {
         username: this.username,
         password,
         ...clientOptions,
       });
       this.initialized = true;
       this.decryptedPassword = password;
-      console.log(`WebDAV 驱动初始化完成: ${this.endpoint}`);
+      console.log(`WebDAV 驱动初始化完成: ${endpointForClient}`);
     } catch (error) {
       console.error("WebDAV 驱动初始化失败", error);
       throw this._wrapError(error, "WebDAV 驱动初始化失败", ApiStatus.INTERNAL_ERROR);
@@ -542,7 +574,7 @@ export class WebDavStorageDriver extends BaseDriver {
    */
   async getStats() {
     this._ensureInitialized();
-    return {
+    const base = {
       type: this.type,
       endpoint: this.endpoint,
       defaultFolder: this.defaultFolder || "/",
@@ -550,6 +582,65 @@ export class WebDavStorageDriver extends BaseDriver {
       initialized: this.initialized,
       timestamp: new Date().toISOString(),
     };
+
+    if (!this.enableDiskUsage) {
+      return {
+        ...base,
+        supported: false,
+        message: "WebDAV 磁盘占用统计未启用（enable_disk_usage = false）",
+      };
+    }
+
+    // WebDAV 配额（quota）读取：RFC 4331 定义 quota-used-bytes / quota-available-bytes
+    // 注意：并非所有 WebDAV 服务都支持；因此失败时返回 supported=false，不抛异常
+    try {
+      const basePath = this._buildDavPath("", true);
+      let quotaRes;
+      try {
+        quotaRes = this.client.getQuota.length >= 1 ? await this.client.getQuota(basePath) : await this.client.getQuota();
+      } catch {
+        quotaRes = await this.client.getQuota();
+      }
+
+      const quotaData = quotaRes && typeof quotaRes === "object" && "data" in quotaRes ? quotaRes.data : quotaRes;
+      const used = quotaData && typeof quotaData === "object" && typeof quotaData.used === "number" ? quotaData.used : null;
+      const available = quotaData && typeof quotaData === "object" && typeof quotaData.available === "number" ? quotaData.available : null;
+
+      if (used == null && available == null) {
+        return {
+          ...base,
+          supported: false,
+          message: "WebDAV 服务器未提供配额信息（可能不支持 RFC 4331 quota 属性）",
+        };
+      }
+
+      const totalBytes = used != null && available != null ? used + available : null;
+      const usedBytes = used != null ? used : null;
+      const remainingBytes = available != null ? available : null;
+
+      let usagePercent = null;
+      if (totalBytes && usedBytes != null && totalBytes > 0) {
+        usagePercent = Math.min(100, Math.round((usedBytes / totalBytes) * 100));
+      }
+
+      return {
+        ...base,
+        supported: true,
+        quota: {
+          raw: quotaData || null,
+          totalBytes,
+          usedBytes,
+          remainingBytes,
+          usagePercent,
+        },
+      };
+    } catch (error) {
+      return {
+        ...base,
+        supported: false,
+        message: error?.message || String(error),
+      };
+    }
   }
 
   async renameItem(oldPath, newPath, options = {}) {

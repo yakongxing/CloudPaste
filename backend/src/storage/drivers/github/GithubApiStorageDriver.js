@@ -38,7 +38,7 @@ export class GithubApiStorageDriver extends BaseDriver {
     this.token = config?.token || null;
     this.ref = config?.ref || null;
     this.defaultFolder = config?.default_folder || "";
-    this.apiBase = config?.api_base || DEFAULT_API_BASE;
+    this.apiBase = config?.endpoint_url || DEFAULT_API_BASE;
     this.ghProxy = config?.gh_proxy || null;
 
     this.committerName = config?.committer_name || null;
@@ -81,16 +81,16 @@ export class GithubApiStorageDriver extends BaseDriver {
     if (!this.owner) errors.push("GitHub API 配置缺少必填字段: owner");
     if (!this.repo) errors.push("GitHub API 配置缺少必填字段: repo");
     if (!this.token) errors.push("GitHub API 配置缺少必填字段: token（写入必须）");
-    if (!this.apiBase) {
-      errors.push("GitHub API 配置缺少 api_base");
-    } else {
+    // endpoint_url 可选：未配置时默认 https://api.github.com
+    // - 若用户显式配置了 endpoint_url，则校验 URL 合法性
+    if (this.config?.endpoint_url) {
       try {
-        const parsed = new URL(this.apiBase);
+        const parsed = new URL(String(this.config.endpoint_url));
         if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-          errors.push("api_base 必须以 http:// 或 https:// 开头");
+          errors.push("endpoint_url 必须以 http:// 或 https:// 开头");
         }
       } catch {
-        errors.push("api_base 不是合法的 URL");
+        errors.push("endpoint_url 不是合法的 URL");
       }
     }
     if (this.defaultFolder) {
