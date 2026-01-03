@@ -24,7 +24,7 @@ export async function mirrorTestConnection(config, _encryptionSecret, _requestOr
     await driver.initialize();
 
     const mount = { id: "mirror_tester", mount_path: "/", storage_type: "MIRROR" };
-    const listing = await driver.listDirectory("/", { mount, subPath: "/", db: null });
+    const listing = await driver.listDirectory("/", { path: "/", mount, subPath: "/", db: null });
 
     const items = Array.isArray(listing?.items) ? listing.items : [];
     info.preset = driver.preset;

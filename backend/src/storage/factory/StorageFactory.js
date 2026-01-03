@@ -31,6 +31,7 @@ import {
 } from "../interfaces/capabilities/index.js";
 import { ValidationError, NotFoundError, DriverContractError } from "../../http/errors.js";
 import { isCloudflareWorkerEnvironment, isNodeJSEnvironment, toBool } from "../../utils/environmentUtils.js";
+import { enforceDriverContract } from "./DriverContractEnforcer.js";
 
 /**
  * 存储驱动注册表
@@ -191,12 +192,16 @@ export class StorageFactory {
     } = {},
   ) {
     if (!type || !ctor) throw new ValidationError("registerDriver 需要提供 type 和 ctor");
+    const normalizedCapabilities = Array.isArray(capabilities) ? capabilities : [];
+    if (normalizedCapabilities.length === 0) {
+      throw new ValidationError(`registerDriver(${String(type)}) 必须声明至少一个 capabilities（例如 READER/WRITER/PROXY/...）`);
+    }
     registry.set(type, {
       ctor,
       tester,
       displayName: displayName || type,
       validate,
-      capabilities: Array.isArray(capabilities) ? capabilities : [],
+      capabilities: normalizedCapabilities,
       ui: ui || null,
       configSchema: configSchema || null,
       providerOptions: Array.isArray(providerOptions) ? providerOptions : null,
@@ -233,7 +238,7 @@ export class StorageFactory {
       await instance.initialize?.();
       // 在实例化完成后执行一次契约校验，确保驱动 type / capabilities / 方法实现与注册信息一致
       validateDriverContract(instance, entry, storageType);
-      return instance;
+      return enforceDriverContract(instance, { storageType });
     }
 
     throw new NotFoundError(`不支持的存储类型: ${storageType}`);
@@ -839,6 +844,7 @@ StorageFactory.registerDriver(StorageFactory.SUPPORTED_TYPES.S3, {
         name: "access_key_id",
         type: "secret",
         required: false,
+        requiredOnCreate: true,
         labelKey: "admin.storage.fields.access_key_id",
         ui: { placeholderKey: "admin.storage.placeholder.access_key_id" },
       },
@@ -846,6 +852,7 @@ StorageFactory.registerDriver(StorageFactory.SUPPORTED_TYPES.S3, {
         name: "secret_access_key",
         type: "secret",
         required: false,
+        requiredOnCreate: true,
         labelKey: "admin.storage.fields.secret_access_key",
         ui: { placeholderKey: "admin.storage.placeholder.secret_access_key" },
       },
@@ -1011,6 +1018,7 @@ StorageFactory.registerDriver(StorageFactory.SUPPORTED_TYPES.WEBDAV, {
         name: "password",
         type: "secret",
         required: false,
+        requiredOnCreate: true,
         labelKey: "admin.storage.fields.password",
         ui: { placeholderKey: "admin.storage.placeholder.password" },
       },
@@ -1328,10 +1336,12 @@ StorageFactory.registerDriver(StorageFactory.SUPPORTED_TYPES.ONEDRIVE, {
         name: "token_renew_endpoint",
         type: "string",
         required: false,
+        requiredWhen: { field: "use_online_api", equals: true },
         labelKey: "admin.storage.fields.onedrive.token_renew_endpoint",
         validation: { rule: "url" },
         ui: {
           fullWidth: true,
+          disabledWhen: { field: "use_online_api", equals: false },
           placeholderKey: "admin.storage.placeholder.onedrive.token_renew_endpoint",
           descriptionKey: "admin.storage.description.onedrive.token_renew_endpoint",
         },
@@ -1455,6 +1465,7 @@ StorageFactory.registerDriver(StorageFactory.SUPPORTED_TYPES.GOOGLE_DRIVE, {
         name: "endpoint_url",
         type: "string",
         required: false,
+        requiredWhen: { field: "use_online_api", equals: true },
         labelKey: "admin.storage.fields.googledrive.endpoint_url",
         validation: { rule: "url" },
         ui: {
@@ -1968,7 +1979,7 @@ StorageFactory.registerDriver(StorageFactory.SUPPORTED_TYPES.TELEGRAM, {
         name: "endpoint_url",
         type: "string",
         required: false,
-        defaultValue: "https://api.telegram.org",
+        requiredWhen: { field: "bot_api_mode", equals: "self_hosted" },
         labelKey: "admin.storage.fields.telegram.endpoint_url",
         validation: { rule: "url" },
         ui: {

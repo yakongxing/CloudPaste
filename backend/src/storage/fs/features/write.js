@@ -79,7 +79,8 @@ export async function uploadFile(fs, path, fileOrStream, userIdOrInfo, userType,
     });
   }
 
-  const result = await driver.uploadFile(path, fileOrStream, {
+  const result = await driver.uploadFile(subPath, fileOrStream, {
+    path,
     mount,
     subPath,
     db: fs.mountManager.db,
@@ -129,7 +130,8 @@ export async function createDirectory(fs, path, userIdOrInfo, userType) {
     });
   }
 
-  const result = await driver.createDirectory(dirPath, {
+  const result = await driver.createDirectory(subPath, {
+    path: dirPath,
     mount,
     subPath,
     db: fs.mountManager.db,
@@ -152,7 +154,16 @@ export async function updateFile(fs, path, content, userIdOrInfo, userType) {
     });
   }
 
-  const result = await driver.updateFile(path, content, {
+  if (!driver.updateFile) {
+    throw new DriverError(`存储驱动 ${driver.getType()} 不支持文件更新`, {
+      status: ApiStatus.NOT_IMPLEMENTED,
+      code: "DRIVER_ERROR.NOT_IMPLEMENTED",
+      expose: true,
+    });
+  }
+
+  const result = await driver.updateFile(subPath, content, {
+    path,
     mount,
     subPath,
     db: fs.mountManager.db,
