@@ -1,6 +1,10 @@
 import { createI18n } from "vue-i18n";
-import zhCN from "./locales/zh-CN";
-import enUS from "./locales/en-US";
+import { useLocalStorage } from "@vueuse/core";
+import zhCN from "./locales/zh-CN/index.js";
+import enUS from "./locales/en-US/index.js";
+import { createLogger } from "@/utils/logger.js";
+
+const log = createLogger("i18n");
 
 // 获取浏览器语言设置
 const getBrowserLanguage = () => {
@@ -12,14 +16,12 @@ const getBrowserLanguage = () => {
 };
 
 // 获取保存的语言设置，如果没有则使用浏览器语言
-const getSavedLanguage = () => {
-  const savedLang = localStorage.getItem("language");
-  return savedLang || getBrowserLanguage();
-};
+const storedLanguage = useLocalStorage("language", getBrowserLanguage());
+const getSavedLanguage = () => storedLanguage.value || getBrowserLanguage();
 
 // 保存语言设置到本地存储
 export const saveLanguagePreference = (lang) => {
-  localStorage.setItem("language", lang);
+  storedLanguage.value = lang;
 };
 
 // 创建i18n实例
@@ -43,10 +45,11 @@ const i18n = createI18n({
 // 调试辅助函数 - 仅在开发环境需要时使用
 export const debugI18n = () => {
   if (import.meta.env.DEV) {
-    console.log("当前i18n配置:", {
+    log.debug("当前i18n配置:", {
       当前语言: i18n.global.locale.value,
       回退语言: i18n.global.fallbackLocale.value,
       可用语言: Object.keys(i18n.global.messages.value),
+      模块化结构: "已启用",
     });
   }
 };

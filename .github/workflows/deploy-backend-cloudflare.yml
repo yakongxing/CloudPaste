@@ -1,4 +1,4 @@
-name: Deploy Backend to Cloudflare Workers
+name: Deploy Backend CF Workers[Worker后端分离部署]
 
 on:
   push:
@@ -6,11 +6,55 @@ on:
     paths:
       - "backend/**"
   workflow_dispatch:
+    inputs:
+      from_panel:
+        description: "是否由部署控制面板触发 / triggered from deployment control panel"
+        required: false
+        default: "false"
   repository_dispatch:
     types: [deploy-button]
 
 jobs:
+  check-config:
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🔍 检查部署配置
+        id: check
+        run: |
+          # 手动触发时（workflow_dispatch / repository_dispatch），总是部署，忽略自动部署开关
+          if [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ 手动触发（repository_dispatch），忽略开关，允许部署"
+            exit 0
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.from_panel }}" != "true" ]]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ 手动触发（workflow_dispatch），忽略开关，允许部署"
+            exit 0
+          fi
+
+          # 自动触发（push 或控制面板触发）根据仓库级变量决定是否部署
+          BACKEND_ENABLED="${{ vars.BACKEND_DEPLOY }}"
+          # 默认行为：如果仓库变量未设置，视为已开启自动部署（向下兼容旧逻辑）
+          [ -z "$BACKEND_ENABLED" ] && BACKEND_ENABLED="true"
+
+          if [ "$BACKEND_ENABLED" = "true" ]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ 后端自动部署已开启，允许部署"
+          else
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo "⏸️ 后端自动部署已关闭，跳过部署"
+          fi
+
   deploy-backend:
+    needs: check-config
+    if: needs.check-config.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -23,12 +67,19 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: "./backend/package-lock.json"
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          echo "安装依赖（不包含可选依赖）..."
+          if npm ci --no-optional; then
+            echo "✅ npm ci 成功"
+          else
+            echo "⚠️ npm ci 失败，将使用npm install更新lock文件"
+            npm install --no-optional
+          fi
 
       - name: Disable wrangler telemetry
         run: npx wrangler telemetry disable
@@ -56,7 +107,7 @@ jobs:
             DATABASE_ID=$EXISTING_DB
           else
             CREATE_OUTPUT=$(npx wrangler d1 create cloudpaste-db 2>&1)
-            
+
             if echo "$CREATE_OUTPUT" | grep -q "Successfully created DB"; then
               DATABASE_ID=$(echo "$CREATE_OUTPUT" | grep -oP "database_id = \"\K[^\"]+")
               if [ -z "$DATABASE_ID" ]; then
@@ -65,7 +116,7 @@ jobs:
             else
               LIST_OUTPUT=$(npx wrangler d1 list --json 2>/dev/null || echo "[]")
               DATABASE_ID=$(echo "$LIST_OUTPUT" | jq -r '.[] | select(.name=="cloudpaste-db") | .uuid')
-              
+
               if [ -z "$DATABASE_ID" ]; then
                 echo "❌ 无法创建或找到D1数据库"
                 exit 1
@@ -83,38 +134,50 @@ jobs:
         run: |
           npx wrangler d1 execute cloudpaste-db --file=./schema.sql || echo "表可能已存在，继续部署"
 
-      - name: Set ENCRYPTION_SECRET environment variable
+      - name: Resolve ENCRYPTION_SECRET for deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if [[ -n "${{ secrets.ENCRYPTION_SECRET }}" ]]; then
-            ENCRYPTION_VALUE="${{ secrets.ENCRYPTION_SECRET }}"
-          else
-            ENCRYPTION_VALUE=$(openssl rand -base64 32)
+          echo "检查 ENCRYPTION_SECRET 配置..."
+
+          # 1) 如果 Worker 里已存在 ENCRYPTION_SECRET（作为 Secret），则保持不变（跳过）
+          set +e
+          SECRET_LIST_OUTPUT=$(npx wrangler secret list 2>&1)
+          set -e
+          if echo "$SECRET_LIST_OUTPUT" | grep -q "ENCRYPTION_SECRET"; then
+            echo "✅ Worker 已存在 ENCRYPTION_SECRET（Secret），保持不变"
+            exit 0
           fi
 
-          SECRET_EXISTS=$(npx wrangler secret list 2>&1 | grep -q "ENCRYPTION_SECRET" && echo "yes" || echo "no")
+          # 2) 如果 GitHub Secrets 里配置了 ENCRYPTION_SECRET，则使用
+          if [[ -n "${{ secrets.ENCRYPTION_SECRET }}" ]]; then
+            echo "✅ 使用 GitHub Secrets 中的 ENCRYPTION_SECRET"
+            ENCRYPTION_VALUE="${{ secrets.ENCRYPTION_SECRET }}"
+            ENCRYPTION_ESCAPED=$(printf '%s' "$ENCRYPTION_VALUE" | sed -e 's/[\\/&]/\\&/g')
 
-          if [ "$SECRET_EXISTS" = "no" ]; then
-            set +e
-            echo "$ENCRYPTION_VALUE" | npx wrangler secret put ENCRYPTION_SECRET
-            SECRET_RESULT=$?
-            set -e
-            
-            if [ $SECRET_RESULT -ne 0 ] && ! npx wrangler secret list 2>&1 | grep -q "ENCRYPTION_SECRET"; then
-              echo "❌ 设置机密失败"
-              exit 1
+            if grep -q "^ENCRYPTION_SECRET =" wrangler.toml; then
+              sed -i -E "s/^ENCRYPTION_SECRET = \".*\"$/ENCRYPTION_SECRET = \"${ENCRYPTION_ESCAPED}\"/" wrangler.toml
+            else
+              sed -i -E "/^\\[vars\\]$/a\\ENCRYPTION_SECRET = \"${ENCRYPTION_ESCAPED}\"" wrangler.toml
             fi
+            exit 0
+          fi
+
+          # 3) GitHub 没配：用 wrangler.toml 
+          if grep -q "^ENCRYPTION_SECRET =" wrangler.toml; then
+            echo "✅ 使用 wrangler.toml 中的 ENCRYPTION_SECRET"
+          else
+            echo "❌ 缺少 ENCRYPTION_SECRET：GitHub Secrets 未配置，wrangler.toml 也没写"
+            exit 1
           fi
 
       - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: "./backend"
-          command: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler deploy 2>&1 | sed -E 's/https:\/\/[a-zA-Z0-9.-]*\.(workers|pages)\.dev/https:\/\/[REDACTED].\1.dev/g'
 
       - name: Display Success Information
         if: steps.check-deploy-button.outputs.is_deploy_button == 'true' && success()

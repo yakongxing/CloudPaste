@@ -1,6 +1,7 @@
 <template>
   <button
     type="button"
+    ref="buttonRef"
     @click="toggleLanguageMenu"
     :class="[
       'p-2 rounded-full focus:outline-none transition-colors relative',
@@ -9,14 +10,7 @@
     :aria-label="$t('language.toggle')"
   >
     <span class="sr-only">{{ $t("language.toggle") }}</span>
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"
-      />
-    </svg>
+    <IconTranslate />
 
     <!-- 当前语言指示器 -->
     <span class="absolute top-0 right-0 inline-flex items-center justify-center h-3 w-3 rounded-full bg-blue-500 text-xs text-white">
@@ -56,9 +50,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, onMounted } from "vue";
+import { useLocalStorage, onClickOutside } from "@vueuse/core";
 import { useI18n } from "vue-i18n";
 import { saveLanguagePreference } from "../i18n";
+import { IconTranslate } from "@/components/icons";
 
 const props = defineProps({
   darkMode: {
@@ -68,15 +64,16 @@ const props = defineProps({
 });
 
 const { locale, t } = useI18n();
+const buttonRef = ref(null);
 const showLanguageMenu = ref(false);
 const currentLanguage = computed(() => locale.value);
+const storedLanguage = useLocalStorage("language", locale.value);
 
 // 初始化时检查当前语言
 onMounted(() => {
   // 确保语言与本地存储一致
-  const savedLang = localStorage.getItem("language");
-  if (savedLang && savedLang !== locale.value) {
-    locale.value = savedLang;
+  if (storedLanguage.value && storedLanguage.value !== locale.value) {
+    locale.value = storedLanguage.value;
   }
 });
 
@@ -95,20 +92,9 @@ const changeLanguage = (lang) => {
   window.dispatchEvent(new CustomEvent("languageChanged", { detail: { locale: lang } }));
 };
 
-// 点击外部区域关闭菜单
-const handleClickOutside = (event) => {
-  const target = event.target;
-  if (showLanguageMenu.value && !target.closest("button")) {
-    showLanguageMenu.value = false;
-  }
-};
-
-// 挂载和卸载点击外部关闭事件
-onMounted(() => {
-  document.addEventListener("click", handleClickOutside);
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener("click", handleClickOutside);
+// 点击外部关闭菜单（VueUse 自动管理监听器与清理）
+onClickOutside(buttonRef, () => {
+  if (!showLanguageMenu.value) return;
+  showLanguageMenu.value = false;
 });
 </script>

@@ -12,8 +12,14 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Match header background to hide overscroll gap */
 body {
   min-height: 100vh;
+  @apply bg-custom-surface transition-colors duration-200;
+}
+
+.dark body {
+  @apply bg-custom-surface-dark;
 }
 
 /* 自定义组件样式 */
@@ -35,7 +41,7 @@ body {
   }
 
   .card {
-    @apply bg-white rounded-lg shadow-md overflow-hidden transition-colors duration-200 dark:bg-gray-800 dark:border-gray-700;
+    @apply bg-custom-surface rounded-lg shadow-md overflow-hidden transition-colors duration-200 dark:bg-custom-surface-dark dark:border-gray-700;
   }
 }
 
@@ -44,13 +50,20 @@ body {
   color-scheme: dark;
 }
 
-.dark body {
-  @apply bg-gray-900 text-gray-100;
-}
-
 /* 移动设备优化 */
 @media (max-width: 640px) {
   html {
     font-size: 14px;
   }
+}
+
+/* ===== Notivue 样式微调 ===== */
+
+/* 内容区域 - 防止长文本溢出 */
+.Notivue__content-message {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 3 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  word-break: break-word;
 }
